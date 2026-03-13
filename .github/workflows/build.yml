@@ -48,18 +48,28 @@ jobs:
         path: dist/*.exe
 
     # ---------------------------------------------
-    # MAC & LINUX BUILD
+    # MAC BUILD
     # ---------------------------------------------
-    - name: Build Mac and Linux
-      if: matrix.os != 'windows-latest'
-      run: pyinstaller --onefile --windowed --name "Gaming_Alexandria_Researcher" app.py
+    - name: Build Mac
+      if: matrix.os == 'macos-latest'
+      run: |
+        pyinstaller --onefile --windowed --name "Gaming_Alexandria_Researcher" app.py
+        cd dist
+        zip -r Gaming_Alexandria_Researcher_Mac.zip Gaming_Alexandria_Researcher.app
 
     - name: Upload Mac File
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
         name: Mac-Executable
-        path: dist/Gaming_Alexandria_Researcher.app
+        path: dist/Gaming_Alexandria_Researcher_Mac.zip
+
+    # ---------------------------------------------
+    # LINUX BUILD
+    # ---------------------------------------------
+    - name: Build Linux
+      if: matrix.os == 'ubuntu-latest'
+      run: pyinstaller --onefile --windowed --name "Gaming_Alexandria_Researcher" app.py
 
     - name: Upload Linux File
       if: matrix.os == 'ubuntu-latest'
