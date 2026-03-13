@@ -1,24 +1,27 @@
-import os
-import sys
-import webbrowser
-import threading
-import fitz  # PyMuPDF
+#!/usr/bin/env python3
 import io
-import re
 import json
-import time
-import tempfile
-import zipfile
+import os
+import re
 import shutil
+import sys
+import tempfile
+import threading
+import time
 import urllib.request
-import urllib.error
-from flask import Flask, render_template_string, send_file, request, jsonify
+import webbrowser
+import zipfile
 from pathlib import Path
+
+import fitz  # PyMuPDF
+from flask import Flask, Response, jsonify, render_template_string, request, send_file
 
 app = Flask(__name__)
 
+SERVER_PORT = 18028  # 'Fl' in hex for Flatso
+
 # --- PORTABLE PATH LOGIC ---
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     ROOT_DIR = Path(sys.executable).parent
 else:
     ROOT_DIR = Path(__file__).parent
@@ -27,9 +30,9 @@ DATA_DIR = ROOT_DIR / "Magazines"
 BOOKMARKS_FILE = ROOT_DIR / "bookmarks.json"
 CATALOG_FILE = ROOT_DIR / "catalog.json"
 # Add as many backup URLs as you want inside these brackets, wrapped in quotes and separated by commas!
-CATALOG_URLS =[
+CATALOG_URLS = [
     "https://www.gamingalexandria.com/ga-researcher/catalog.json",
-    "https://archive.org/download/ga-researcher-files/catalog.json"
+    "https://archive.org/download/ga-researcher-files/catalog.json",
 ]
 CATALOGS_DIR = ROOT_DIR / "Catalogs"
 COVERS_DIR = ROOT_DIR / "Covers"
@@ -38,15 +41,17 @@ LAST_PING = time.time()
 METADATA_CACHE = {}
 DOWNLOAD_STATE = {}
 
+
 # --- SECURITY UTILS ---
-def get_safe_path(rel_path):
+def get_safe_path(rel_path: str) -> Path:
     p = (DATA_DIR / rel_path).resolve()
     if not str(p).startswith(str(DATA_DIR.resolve())):
         raise ValueError("Unsafe path traversal detected.")
     return p
 
+
 # --- UI ---
-HTML_UI = """
+HTML_UI = r"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -1358,346 +1363,495 @@ function renderLibrary() {
 
 # --- BACKEND ---
 
-def parse_metadata(text):
+
+def parse_metadata(text: str) -> dict:
     meta = {}
     mapping = {
-        'magazine name': 'name', 'publisher': 'publisher', 'date': 'date',
-        'issue name': 'issue_name', 'scanner': 'scanner', 'scanner url': 'scanner_url',
-        'editor': 'editor', 'editor url': 'editor_url', 'region': 'region', 'translation': 'translation', 'tags': 'tags', 'version': 'version', 'notes': 'notes'
+        "magazine name": "name",
+        "publisher": "publisher",
+        "date": "date",
+        "issue name": "issue_name",
+        "scanner": "scanner",
+        "scanner url": "scanner_url",
+        "editor": "editor",
+        "editor url": "editor_url",
+        "region": "region",
+        "translation": "translation",
+        "tags": "tags",
+        "version": "version",
+        "notes": "notes",
     }
     for line in text.splitlines():
-        if ':' in line:
-            key, val = line.split(':', 1)
+        if ":" in line:
+            key, val = line.split(":", 1)
             clean_key = key.strip().lower()
-            if clean_key in mapping: meta[mapping[clean_key]] = val.strip()
+            if clean_key in mapping:
+                meta[mapping[clean_key]] = val.strip()
     return meta
 
-def get_partner_zip(pdf_rel_path):
+
+def get_partner_zip(pdf_rel_path: str) -> Path | None:
     pdf_path = DATA_DIR / pdf_rel_path
-    if not pdf_path.exists(): return None
+    if not pdf_path.exists():
+        return None
     direct_zip = pdf_path.with_suffix(".zip")
-    if direct_zip.exists(): return direct_zip
+    if direct_zip.exists():
+        return direct_zip
     zips_in_folder = list(pdf_path.parent.glob("*.zip"))
-    if len(zips_in_folder) == 1: return zips_in_folder[0]
+    if len(zips_in_folder) == 1:
+        return zips_in_folder[0]
     return None
 
-def load_metadata_cache():
+
+def load_metadata_cache() -> None:
     global METADATA_CACHE
     temp_cache = {}  # Build it in a temporary dictionary first!
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     for pdf in DATA_DIR.rglob("*.pdf"):
         rel_path = pdf.relative_to(DATA_DIR).as_posix()
         partner_zip = get_partner_zip(rel_path)
         meta = {}
-        
+
         if partner_zip:
             try:
-                with zipfile.ZipFile(partner_zip, 'r') as z:
-                    meta_file = next((n for n in z.namelist() if n.split('/')[-1].lower() == 'metadata.txt'), None)
-                    if meta_file: meta = parse_metadata(z.read(meta_file).decode('utf-8', errors='ignore'))
-            except: pass
-        
+                with zipfile.ZipFile(partner_zip, "r") as z:
+                    meta_file = next(
+                        (
+                            n
+                            for n in z.namelist()
+                            if n.split("/")[-1].lower() == "metadata.txt"
+                        ),
+                        None,
+                    )
+                    if meta_file:
+                        meta = parse_metadata(
+                            z.read(meta_file).decode("utf-8", errors="ignore")
+                        )
+            except:
+                pass
+
         loose_meta = pdf.with_name(pdf.stem + ".metadata.txt")
         generic_meta = pdf.parent / "metadata.txt"
-        
+
         if loose_meta.exists():
-            meta.update(parse_metadata(loose_meta.read_text(encoding='utf-8', errors='ignore')))
+            meta.update(
+                parse_metadata(loose_meta.read_text(encoding="utf-8", errors="ignore"))
+            )
         elif generic_meta.exists() and pdf.parent != DATA_DIR:
-            meta.update(parse_metadata(generic_meta.read_text(encoding='utf-8', errors='ignore')))
-            
+            meta.update(
+                parse_metadata(
+                    generic_meta.read_text(encoding="utf-8", errors="ignore")
+                )
+            )
+
         temp_cache[rel_path] = meta
-        
+
     METADATA_CACHE = temp_cache  # Instantly swap it so the UI never sees an empty list
 
-def get_transcription_text(pdf_rel_path, page_str):
+
+def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
     pdf_path = DATA_DIR / pdf_rel_path
     pattern = re.compile(rf"_p0*{int(page_str)}\.txt$", re.IGNORECASE)
-    
+
     for lp in pdf_path.parent.glob("*.txt"):
         if pattern.search(lp.name):
-            return lp.read_text(encoding='utf-8', errors='ignore')
-    
+            return lp.read_text(encoding="utf-8", errors="ignore")
+
     partner_zip = get_partner_zip(pdf_rel_path)
     if partner_zip:
         try:
-            with zipfile.ZipFile(partner_zip, 'r') as z:
+            with zipfile.ZipFile(partner_zip, "r") as z:
                 for zname in z.namelist():
-                    if pattern.search(zname.split('/')[-1]):
-                        return z.read(zname).decode('utf-8', errors='ignore')
-        except: pass
+                    if pattern.search(zname.split("/")[-1]):
+                        return z.read(zname).decode("utf-8", errors="ignore")
+        except:
+            pass
     return None
 
-def update_zip_content(zip_path, filename, new_content):
+
+def update_zip_content(zip_path: Path, filename: str, new_content: str) -> None:
     temp_fd, temp_path = tempfile.mkstemp(dir=zip_path.parent)
     os.close(temp_fd)
     try:
         replaced = False
-        with zipfile.ZipFile(zip_path, 'r') as zin:
-            with zipfile.ZipFile(temp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+        with zipfile.ZipFile(zip_path, "r") as zin:
+            with zipfile.ZipFile(
+                temp_path, "w", compression=zipfile.ZIP_DEFLATED
+            ) as zout:
                 for item in zin.infolist():
-                    if item.filename.split('/')[-1].lower() == filename.lower():
+                    if item.filename.split("/")[-1].lower() == filename.lower():
                         zout.writestr(item.filename, new_content)
                         replaced = True
                     else:
                         zout.writestr(item, zin.read(item.filename))
-                
+
                 # If this page didn't have a file in the ZIP yet, create it
                 if not replaced:
                     zout.writestr(filename, new_content)
-                    
+
         time.sleep(0.1)
         os.replace(temp_path, zip_path)
     except Exception as e:
-        if os.path.exists(temp_path): os.remove(temp_path)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         raise e
 
+
 # --- DOWNLOAD LOGIC ---
-def download_waterfall(task_id, out_path, sources, file_type):
-    if not sources: return True 
+def download_waterfall(
+    task_id: str, out_path: Path, sources: list, file_type: str
+) -> bool:
+    if not sources:
+        return True
     for url in sources:
-        DOWNLOAD_STATE[task_id]['status'] = f"Downloading {file_type}..."
-        DOWNLOAD_STATE[task_id]['progress'] = 0
+        DOWNLOAD_STATE[task_id]["status"] = f"Downloading {file_type}..."
+        DOWNLOAD_STATE[task_id]["progress"] = 0
         try:
             # Force no-cache so we never get a stale file from the server
-            req = urllib.request.Request(url, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            })
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+            )
             with urllib.request.urlopen(req, timeout=60) as response:
-                total_size = int(response.headers.get('Content-Length', 0))
-                with open(out_path, 'wb') as f:
+                total_size = int(response.headers.get("Content-Length", 0))
+                with open(out_path, "wb") as f:
                     downloaded = 0
                     while True:
                         chunk = response.read(16384)
-                        if not chunk: break
+                        if not chunk:
+                            break
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total_size: DOWNLOAD_STATE[task_id]['progress'] = int((downloaded / total_size) * 100)
+                        if total_size:
+                            DOWNLOAD_STATE[task_id]["progress"] = int(
+                                (downloaded / total_size) * 100
+                            )
             return True
         except Exception as e:
-            if out_path.exists(): out_path.unlink()
+            if out_path.exists():
+                out_path.unlink()
             continue
-    DOWNLOAD_STATE[task_id]['error'] = f"All {file_type} backups failed."
+    DOWNLOAD_STATE[task_id]["error"] = f"All {file_type} backups failed."
     return False
 
-def download_worker(task_id, item):
+
+def download_worker(task_id: str, item: dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    DOWNLOAD_STATE[task_id] = {'status': 'Initializing...', 'progress': 0, 'error': None, 'done': False}
-    
+    DOWNLOAD_STATE[task_id] = {
+        "status": "Initializing...",
+        "progress": 0,
+        "error": None,
+        "done": False,
+    }
+
     temp_dir = DATA_DIR / f".temp_{task_id}"
     temp_dir.mkdir(parents=True, exist_ok=True)
-    
-    pdf_temp = temp_dir / item.get('pdf_filename')
-    zip_temp = temp_dir / (item.get('zip_filename') or f"{Path(item.get('pdf_filename')).stem}_Data.zip")
-    
-    success_pdf = download_waterfall(task_id, pdf_temp, item.get('pdf_sources',[]), "PDF")
+
+    pdf_filename = item.get("pdf_filename", "mag.pdf")
+    pdf_temp = temp_dir / pdf_filename
+    zip_temp = temp_dir / (
+        item.get("zip_filename") or f"{Path(pdf_filename).stem}_Data.zip"
+    )
+
+    success_pdf = download_waterfall(
+        task_id, pdf_temp, item.get("pdf_sources", []), "PDF"
+    )
     if not success_pdf:
-        DOWNLOAD_STATE[task_id]['done'] = True
-        return
-        
-    success_zip = download_waterfall(task_id, zip_temp, item.get('zip_sources',[]), "Data ZIP")
-    if not success_zip:
-        DOWNLOAD_STATE[task_id]['done'] = True
+        DOWNLOAD_STATE[task_id]["done"] = True
         return
 
-    DOWNLOAD_STATE[task_id]['status'] = "Organizing..."
+    success_zip = download_waterfall(
+        task_id, zip_temp, item.get("zip_sources", []), "Data ZIP"
+    )
+    if not success_zip:
+        DOWNLOAD_STATE[task_id]["done"] = True
+        return
+
+    DOWNLOAD_STATE[task_id]["status"] = "Organizing..."
     meta = {}
     if success_zip and zip_temp.exists():
         try:
-            with zipfile.ZipFile(zip_temp, 'r') as z:
-                meta_file = next((n for n in z.namelist() if n.split('/')[-1].lower() == 'metadata.txt'), None)
-                if meta_file: meta = parse_metadata(z.read(meta_file).decode('utf-8', errors='ignore'))
-        except: pass
+            with zipfile.ZipFile(zip_temp, "r") as z:
+                meta_file = next(
+                    (
+                        n
+                        for n in z.namelist()
+                        if n.split("/")[-1].lower() == "metadata.txt"
+                    ),
+                    None,
+                )
+                if meta_file:
+                    meta = parse_metadata(
+                        z.read(meta_file).decode("utf-8", errors="ignore")
+                    )
+        except:
+            pass
 
-    mag_name = meta.get('name', item.get('magazine_name', 'Unsorted')).replace('/', '_').replace('\\', '_')
-    date_str = meta.get('date', item.get('date', '')).replace('/', '-').replace('\\', '-')
-    issue_name = meta.get('issue_name', item.get('issue_name', '')).replace('/', '_').replace('\\', '_')
-    
+    mag_name = (
+        meta.get("name", item.get("magazine_name", "Unsorted"))
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+    date_str = (
+        meta.get("date", item.get("date", "")).replace("/", "-").replace("\\", "-")
+    )
+    issue_name = (
+        meta.get("issue_name", item.get("issue_name", ""))
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+
     folder_name = ""
-    if date_str and issue_name: folder_name = f"{date_str} - {issue_name}"
-    elif issue_name: folder_name = issue_name
-    elif date_str: folder_name = date_str
-    
+    if date_str and issue_name:
+        folder_name = f"{date_str} - {issue_name}"
+    elif issue_name:
+        folder_name = issue_name
+    elif date_str:
+        folder_name = date_str
+
     final_dir = DATA_DIR / mag_name
-    if folder_name: final_dir = final_dir / folder_name
+    if folder_name:
+        final_dir = final_dir / folder_name
     final_dir.mkdir(parents=True, exist_ok=True)
-    
-    if success_pdf and pdf_temp.exists(): os.replace(pdf_temp, final_dir / item.get('pdf_filename'))
-    if success_zip and zip_temp.exists(): os.replace(zip_temp, final_dir / zip_temp.name)
-    
+
+    if success_pdf and pdf_temp.exists():
+        os.replace(pdf_temp, final_dir / item.get("pdf_filename"))
+    if success_zip and zip_temp.exists():
+        os.replace(zip_temp, final_dir / zip_temp.name)
+
     # Clean up any old loose text files so they don't override the fresh ZIP transcriptions
-    for old_txt in final_dir.glob(f"{Path(item.get('pdf_filename', 'mag.pdf')).stem}_p*.txt"):
-        try: old_txt.unlink()
-        except: pass
+    for old_txt in final_dir.glob(
+        f"{Path(item.get('pdf_filename', 'mag.pdf')).stem}_p*.txt"
+    ):
+        try:
+            old_txt.unlink()
+        except:
+            pass
 
     # 1. Build the fresh metadata content from the Catalog
-    ml =[]
-    if item.get('magazine_name'): ml.append(f"Magazine Name: {item['magazine_name']}")
-    if item.get('publisher'): ml.append(f"Publisher: {item['publisher']}")
-    if item.get('date'): ml.append(f"Date: {item['date']}")
-    if item.get('issue_name'): ml.append(f"Issue Name: {item['issue_name']}")
-    if item.get('original_language'): ml.append(f"Region: {item['original_language']}")
-    if item.get('translated_language'): ml.append(f"Translation: {item['translated_language']}")
-    if item.get('version'): ml.append(f"Version: {item['version']}")
-    if item.get('tags'): ml.append(f"Tags: {item['tags']}")
-    if item.get('scanner'): ml.append(f"Scanner: {item['scanner']}")
-    if item.get('scanner_url'): ml.append(f"Scanner URL: {item['scanner_url']}")
-    if item.get('editor'): ml.append(f"Editor: {item['editor']}")
-    if item.get('editor_url'): ml.append(f"Editor URL: {item['editor_url']}")
-    if item.get('notes'): ml.append(f"Notes: {item['notes']}")
+    ml = []
+    if item.get("magazine_name"):
+        ml.append(f"Magazine Name: {item['magazine_name']}")
+    if item.get("publisher"):
+        ml.append(f"Publisher: {item['publisher']}")
+    if item.get("date"):
+        ml.append(f"Date: {item['date']}")
+    if item.get("issue_name"):
+        ml.append(f"Issue Name: {item['issue_name']}")
+    if item.get("original_language"):
+        ml.append(f"Region: {item['original_language']}")
+    if item.get("translated_language"):
+        ml.append(f"Translation: {item['translated_language']}")
+    if item.get("version"):
+        ml.append(f"Version: {item['version']}")
+    if item.get("tags"):
+        ml.append(f"Tags: {item['tags']}")
+    if item.get("scanner"):
+        ml.append(f"Scanner: {item['scanner']}")
+    if item.get("scanner_url"):
+        ml.append(f"Scanner URL: {item['scanner_url']}")
+    if item.get("editor"):
+        ml.append(f"Editor: {item['editor']}")
+    if item.get("editor_url"):
+        ml.append(f"Editor URL: {item['editor_url']}")
+    if item.get("notes"):
+        ml.append(f"Notes: {item['notes']}")
     meta_content = "\n".join(ml)
 
     # 2. Force Overwrite: Inject into ZIP if ZIP exists, otherwise save as loose file
-    zip_filename = item.get('zip_filename') or f"{Path(item.get('pdf_filename', 'mag.pdf')).stem}_Data.zip"
+    pdf_filename = item.get("pdf_filename", "mag.pdf")
+    zip_filename = item.get("zip_filename") or f"{Path(pdf_filename).stem}_Data.zip"
     zip_path = final_dir / zip_filename
-    loose_meta = final_dir / f"{Path(item.get('pdf_filename', 'mag.pdf')).stem}.metadata.txt"
+    loose_meta = final_dir / f"{Path(pdf_filename).stem}.metadata.txt"
 
     if zip_path.exists():
         try:
-            update_zip_content(zip_path, 'metadata.txt', meta_content)
-            if loose_meta.exists(): os.remove(loose_meta) # Clean up old loose files
-        except Exception: pass
+            update_zip_content(zip_path, "metadata.txt", meta_content)
+            if loose_meta.exists():
+                os.remove(loose_meta)  # Clean up old loose files
+        except Exception:
+            pass
     else:
-        loose_meta.write_text(meta_content, encoding='utf-8')
-    
-    try: shutil.rmtree(temp_dir)
-    except: pass
+        loose_meta.write_text(meta_content, encoding="utf-8")
 
-    DOWNLOAD_STATE[task_id]['progress'] = 100
-    DOWNLOAD_STATE[task_id]['status'] = "Complete!"
-    DOWNLOAD_STATE[task_id]['done'] = True
-    load_metadata_cache() 
+    try:
+        shutil.rmtree(temp_dir)
+    except:
+        pass
+
+    DOWNLOAD_STATE[task_id]["progress"] = 100
+    DOWNLOAD_STATE[task_id]["status"] = "Complete!"
+    DOWNLOAD_STATE[task_id]["done"] = True
+    load_metadata_cache()
+
 
 # --- STANDARD ENDPOINTS ---
-def get_all_catalogs():
-    catalogs =[]
-    
+def get_all_catalogs() -> list:
+    catalogs = []
+
     # 1. Main Official Catalog (With Fallback Backups)
     official_loaded = False
     if CATALOG_URLS:
         urls_to_try = CATALOG_URLS if isinstance(CATALOG_URLS, list) else [CATALOG_URLS]
         for url in urls_to_try:
-            if not url: continue
+            if not url:
+                continue
             try:
                 # Use a real-browser disguise to bypass server firewalls and increase timeout to 10s!
-                req = urllib.request.Request(url, headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept': 'application/json, text/plain, */*'
-                })
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                        "Accept": "application/json, text/plain, */*",
+                    },
+                )
                 with urllib.request.urlopen(req, timeout=10) as r:
-                    raw_data = r.read().decode('utf-8')
+                    raw_data = r.read().decode("utf-8")
                     main_data = json.loads(raw_data)
-                    catalogs.extend(main_data.get('items', main_data) if isinstance(main_data, dict) else main_data)
+                    catalogs.extend(
+                        main_data.get("items", main_data)
+                        if isinstance(main_data, dict)
+                        else main_data
+                    )
                     official_loaded = True
                     # Cache it to the hard drive for offline fallback!
-                    try: CATALOG_FILE.write_text(raw_data, encoding='utf-8')
-                    except: pass
+                    try:
+                        CATALOG_FILE.write_text(raw_data, encoding="utf-8")
+                    except:
+                        pass
                     break  # Success! Stop trying backup URLs.
-            except Exception as e: 
-                # (Optional) If it still fails, print(e) here would tell you exactly why!
+            except Exception as e:
+                print(f"Failed to load catalog from {url}: {e}")
                 continue  # Failed. Move to the next backup URL in the list.
 
     # Fallback to local offline file if ALL cloud URLs fail (or if list is empty)
     if not official_loaded and CATALOG_FILE.exists():
         try:
-            main_data = json.loads(CATALOG_FILE.read_text(encoding='utf-8'))
-            catalogs.extend(main_data.get('items', main_data) if isinstance(main_data, dict) else main_data)
-        except: pass
+            main_data = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
+            catalogs.extend(
+                main_data.get("items", main_data)
+                if isinstance(main_data, dict)
+                else main_data
+            )
+        except Exception as e:
+            print(f"Failed to load local catalog: {e}")
 
     # 2. Custom Community Catalogs
     CATALOGS_DIR.mkdir(parents=True, exist_ok=True)
     for c_file in CATALOGS_DIR.glob("*.json"):
         try:
-            c_data = json.loads(c_file.read_text(encoding='utf-8'))
+            c_data = json.loads(c_file.read_text(encoding="utf-8"))
             # Auto-update custom catalog if it has a URL
-            if isinstance(c_data, dict) and 'update_url' in c_data:
+            if isinstance(c_data, dict) and "update_url" in c_data:
                 try:
-                    req = urllib.request.Request(c_data['update_url'], headers={
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    })
+                    req = urllib.request.Request(
+                        c_data["update_url"],
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                        },
+                    )
                     with urllib.request.urlopen(req, timeout=10) as r:
-                        new_data = json.loads(r.read().decode('utf-8'))
-                        c_file.write_text(json.dumps(new_data, indent=4), encoding='utf-8')
+                        new_data = json.loads(r.read().decode("utf-8"))
+                        c_file.write_text(
+                            json.dumps(new_data, indent=4), encoding="utf-8"
+                        )
                         c_data = new_data
-                except: pass
+                except:
+                    pass
 
-            items = c_data.get('items', c_data) if isinstance(c_data, dict) else c_data
+            items = c_data.get("items", c_data) if isinstance(c_data, dict) else c_data
             catalogs.extend(items)
-        except: pass
-        
+        except Exception as e:
+            print(f"Failed to load custom catalog {c_file}: {e}")
+
     return catalogs
-    
-@app.route('/api/cover/<item_id>')
-def get_cover(item_id):
-    v = request.args.get('v', '1.0')
+
+
+@app.route("/api/cover/<item_id>")
+def get_cover(item_id: str) -> Response:
+    v = request.args.get("v", "1.0")
     safe_id = "".join(c for c in item_id if c.isalnum() or c in "_-")
     cache_name = f"{safe_id}_v{v}.cache"
-    
+
     COVERS_DIR.mkdir(parents=True, exist_ok=True)
     cache_path = COVERS_DIR / cache_name
-    
+
     # 1. If we already have it, serve it instantly from the hard drive
     if cache_path.exists():
-        return send_file(cache_path, mimetype='image/jpeg')
-        
+        return send_file(cache_path, mimetype="image/jpeg")
+
     # 2. If we don't have it, find the URL in the catalog
     catalogs = get_all_catalogs()
-    item = next((i for i in catalogs if str(i.get('id')) == item_id), None)
-    
-    if item and item.get('cover_url'):
+    item = next((i for i in catalogs if str(i.get("id")) == item_id), None)
+
+    if item and item.get("cover_url"):
         try:
-            req = urllib.request.Request(item['cover_url'], headers={'User-Agent': 'Mozilla/5.0'})
+            req = urllib.request.Request(
+                item["cover_url"], headers={"User-Agent": "Mozilla/5.0"}
+            )
             with urllib.request.urlopen(req, timeout=5) as response:
                 img_data = response.read()
-                
+
                 # Cleanup older versions of this cover to save space
                 for old_file in COVERS_DIR.glob(f"{safe_id}_v*.cache"):
-                    try: old_file.unlink()
-                    except: pass
-                    
+                    try:
+                        old_file.unlink()
+                    except:
+                        pass
+
                 # Save the new cover and serve it
                 cache_path.write_bytes(img_data)
-                return send_file(io.BytesIO(img_data), mimetype='image/jpeg')
+                return send_file(io.BytesIO(img_data), mimetype="image/jpeg")
         except Exception:
             pass
-            
+
     # 3. Fallback: Return a clean missing cover image if download fails
     svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="#222"/><text x="50%" y="50%" fill="#666" font-family="sans-serif" font-size="14" text-anchor="middle">No Cover Art</text></svg>'
-    return send_file(io.BytesIO(svg.encode('utf-8')), mimetype='image/svg+xml')
+    return send_file(io.BytesIO(svg.encode("utf-8")), mimetype="image/svg+xml")
 
-@app.route('/api/catalog')
-def get_catalog():
+
+@app.route("/api/catalog")
+def get_catalog() -> Response:
     return jsonify(get_all_catalogs())
 
-@app.route('/api/download', methods=['POST'])
-def start_download():
+
+@app.route("/api/download", methods=["POST"])
+def start_download() -> Response | tuple[Response, int]:
     data = request.json
-    item_id = data.get('id')
+    item_id = data.get("id")
     catalog = get_all_catalogs()
-    item = next((i for i in catalog if i['id'] == item_id), None)
+    item = next((i for i in catalog if i["id"] == item_id), None)
     if item:
-        threading.Thread(target=download_worker, args=(item_id, item), daemon=True).start()
+        threading.Thread(
+            target=download_worker, args=(item_id, item), daemon=True
+        ).start()
         return jsonify({"status": "started"})
     return jsonify({"error": "Item not found"}), 404
 
-@app.route('/api/downloads')
-def get_downloads():
+
+@app.route("/api/downloads")
+def get_downloads() -> Response:
     return jsonify(DOWNLOAD_STATE)
 
-@app.route('/api/list')
-def list_mags():
+
+@app.route("/api/list")
+def list_mags() -> Response:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    mags =[p.relative_to(DATA_DIR).as_posix() for p in DATA_DIR.rglob("*.pdf")]
+    mags = [p.relative_to(DATA_DIR).as_posix() for p in DATA_DIR.rglob("*.pdf")]
     load_metadata_cache()
     return jsonify({"files": sorted(mags), "metadata": METADATA_CACHE})
 
-@app.route('/api/render')
-def render_page():
-    mag = request.args.get('mag')
-    pn = int(request.args.get('page', 0))
-    zoom = float(request.args.get('zoom', 1.5))
+
+@app.route("/api/render")
+def render_page() -> Response | tuple[Response, int]:
+    mag = request.args.get("mag", "")
+    pn = int(request.args.get("page", 0))
+    zoom = float(request.args.get("zoom", 1.5))
     try:
         pdf_path = get_safe_path(mag)
         doc = fitz.open(pdf_path)
@@ -1705,82 +1859,106 @@ def render_page():
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
         img = pix.tobytes("png")
         doc.close()
-        return send_file(io.BytesIO(img), mimetype='image/png')
-    except: return ""
+        return send_file(io.BytesIO(img), mimetype="image/png")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/text')
-def get_text():
-    mag_rel_path = request.args.get('mag', '')
-    pg = request.args.get('page', '1').zfill(3)
+
+@app.route("/api/text")
+def get_text() -> Response:
+    mag_rel_path = request.args.get("mag", "")
+    pg = request.args.get("page", "1").zfill(3)
     content = get_transcription_text(mag_rel_path, pg)
-    
+
     total = 0
     try:
         doc = fitz.open(get_safe_path(mag_rel_path))
         total = len(doc)
         doc.close()
-    except: pass
+    except:
+        pass
 
     jp, en, sum_t = "No transcription found for this page.", "", ""
     if content:
-        content = re.sub(r'^#\s?GA-TRANSCRIPTION\s*', '', content, flags=re.IGNORECASE)
-        parts = re.split(r'#\s?GA-TRANSLATION', content, flags=re.IGNORECASE)
-        
+        content = re.sub(r"^#\s?GA-TRANSCRIPTION\s*", "", content, flags=re.IGNORECASE)
+        parts = re.split(r"#\s?GA-TRANSLATION", content, flags=re.IGNORECASE)
+
         if len(parts) > 1:
             jp = parts[0].strip()
-            sub = re.split(r'#\s?GA-SUMMARY', parts[1], flags=re.IGNORECASE)
+            sub = re.split(r"#\s?GA-SUMMARY", parts[1], flags=re.IGNORECASE)
             en = sub[0].strip()
             sum_t = sub[1].strip() if len(sub) > 1 else ""
         else:
             # If there is no Translation tag, check the first part for the Summary tag
-            sub = re.split(r'#\s?GA-SUMMARY', parts[0], flags=re.IGNORECASE)
+            sub = re.split(r"#\s?GA-SUMMARY", parts[0], flags=re.IGNORECASE)
             jp = sub[0].strip()
             sum_t = sub[1].strip() if len(sub) > 1 else ""
-    
+
     meta = METADATA_CACHE.get(mag_rel_path, {})
-    
+
     raw_meta = ""
     partner_zip = get_partner_zip(mag_rel_path)
     pdf_path = DATA_DIR / mag_rel_path
-    
+
     if partner_zip:
         try:
-            with zipfile.ZipFile(partner_zip, 'r') as z:
-                meta_file = next((n for n in z.namelist() if n.split('/')[-1].lower() == 'metadata.txt'), None)
-                if meta_file: raw_meta = z.read(meta_file).decode('utf-8', errors='ignore')
-        except: pass
+            with zipfile.ZipFile(partner_zip, "r") as z:
+                meta_file = next(
+                    (
+                        n
+                        for n in z.namelist()
+                        if n.split("/")[-1].lower() == "metadata.txt"
+                    ),
+                    None,
+                )
+                if meta_file:
+                    raw_meta = z.read(meta_file).decode("utf-8", errors="ignore")
+        except:
+            pass
     else:
         loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
         generic_meta = pdf_path.parent / "metadata.txt"
-        if loose_meta.exists(): raw_meta = loose_meta.read_text(encoding='utf-8', errors='ignore')
-        elif generic_meta.exists() and pdf_path.parent != DATA_DIR: raw_meta = generic_meta.read_text(encoding='utf-8', errors='ignore')
+        if loose_meta.exists():
+            raw_meta = loose_meta.read_text(encoding="utf-8", errors="ignore")
+        elif generic_meta.exists() and pdf_path.parent != DATA_DIR:
+            raw_meta = generic_meta.read_text(encoding="utf-8", errors="ignore")
 
-    return jsonify({"jp": jp, "en": en, "sum": sum_t, "total_pages": total, "metadata": meta, "raw_meta": raw_meta})
+    return jsonify(
+        {
+            "jp": jp,
+            "en": en,
+            "sum": sum_t,
+            "total_pages": total,
+            "metadata": meta,
+            "raw_meta": raw_meta,
+        }
+    )
 
-@app.route('/api/save', methods=['POST'])
-def save_text():
+
+@app.route("/api/save", methods=["POST"])
+def save_text() -> Response | tuple[Response, int]:
     data = request.json
-    rel_path = data['mag']
-    page_num = int(data['page'])
+    rel_path = data["mag"]
+    page_num = int(data["page"])
     pdf_path = get_safe_path(rel_path)
     content = f"#GA-TRANSCRIPTION\n{data['jp']}\n\n#GA-TRANSLATION\n{data['en']}\n\n#GA-SUMMARY\n{data['sum']}"
     pattern = re.compile(rf"_p0*{page_num}\.txt$", re.IGNORECASE)
-    meta_content = data.get('meta', '')
-    
+    meta_content = data.get("meta", "")
+
     try:
         partner_zip = get_partner_zip(rel_path)
         if partner_zip:
             # 1. Update the Page Text File
             target_filename = f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
-            with zipfile.ZipFile(partner_zip, 'r') as z:
+            with zipfile.ZipFile(partner_zip, "r") as z:
                 for zname in z.namelist():
-                    if pattern.search(zname.split('/')[-1]):
+                    if pattern.search(zname.split("/")[-1]):
                         target_filename = zname
                         break
             update_zip_content(partner_zip, target_filename, content)
-            
+
             # 2. Update the Metadata File
-            update_zip_content(partner_zip, 'metadata.txt', meta_content)
+            update_zip_content(partner_zip, "metadata.txt", meta_content)
         else:
             # 1. Update Loose Page Text File
             target_filepath = None
@@ -1789,86 +1967,97 @@ def save_text():
                     target_filepath = lp
                     break
             if not target_filepath:
-                target_filepath = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
-            target_filepath.write_text(content, encoding='utf-8')
-            
+                target_filepath = (
+                    pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
+                )
+            target_filepath.write_text(content, encoding="utf-8")
+
             # 2. Update Loose Metadata File
             loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
             generic_meta = pdf_path.parent / "metadata.txt"
-            
-            if generic_meta.exists() and pdf_path.parent != DATA_DIR:
-                generic_meta.write_text(meta_content, encoding='utf-8')
-            else:
-                loose_meta.write_text(meta_content, encoding='utf-8')
-            
-        load_metadata_cache() # Reload the server cache instantly
-        return jsonify({"status": "ok"})
-    except Exception as e: return jsonify({"error": str(e)}), 500
 
-@app.route('/api/search')
-def search():
-    query = request.args.get('q', '')
-    scope = request.args.get('scope', 'global')
-    inc_jp = request.args.get('incJp') == 'true'
-    inc_en = request.args.get('incEn') == 'true'
-    inc_sum = request.args.get('incSum') == 'true'
-    current_mag = request.args.get('currentMag', '')
-    mag_filter = request.args.get('magFilter', '').lower()
-    date_start = request.args.get('dateStart', '')
-    date_end = request.args.get('dateEnd', '')
-    tag_filter = request.args.get('tagFilter', '').lower()
-    
-    def normalize_meta_date(d_str):
-        if not d_str: return ""
-        clean = re.sub(r'[^\d\-\/]', '', d_str).replace('/', '-')
-        parts = clean.split('-')
+            if generic_meta.exists() and pdf_path.parent != DATA_DIR:
+                generic_meta.write_text(meta_content, encoding="utf-8")
+            else:
+                loose_meta.write_text(meta_content, encoding="utf-8")
+
+        load_metadata_cache()  # Reload the server cache instantly
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/search")
+def search() -> Response:
+    query = request.args.get("q", "")
+    scope = request.args.get("scope", "global")
+    inc_jp = request.args.get("incJp") == "true"
+    inc_en = request.args.get("incEn") == "true"
+    inc_sum = request.args.get("incSum") == "true"
+    current_mag = request.args.get("currentMag", "")
+    mag_filter = request.args.get("magFilter", "").lower()
+    date_start = request.args.get("dateStart", "")
+    date_end = request.args.get("dateEnd", "")
+    tag_filter = request.args.get("tagFilter", "").lower()
+
+    def normalize_meta_date(d_str: str) -> str:
+        if not d_str:
+            return ""
+        clean = re.sub(r"[^\d\-\/]", "", d_str).replace("/", "-")
+        parts = clean.split("-")
         if len(parts) == 3:
-            if len(parts[0]) == 4: return f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
-            elif len(parts[2]) == 4: return f"{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
-        elif len(parts) == 2 and len(parts[0]) == 4: return f"{parts[0]}-{parts[1].zfill(2)}-01"
-        elif len(parts) == 1 and len(parts[0]) == 4: return f"{parts[0]}-01-01"
+            if len(parts[0]) == 4:
+                return f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+            elif len(parts[2]) == 4:
+                return f"{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+        elif len(parts) == 2 and len(parts[0]) == 4:
+            return f"{parts[0]}-{parts[1].zfill(2)}-01"
+        elif len(parts) == 1 and len(parts[0]) == 4:
+            return f"{parts[0]}-01-01"
         return clean
-    
+
     # Smart Query Parsing
     neg_exact = re.findall(r'-"([^"]+)"', query)
-    query = re.sub(r'-"[^"]+"', '', query)
-    
+    query = re.sub(r'-"[^"]+"', "", query)
+
     exact_phrases = re.findall(r'"([^"]+)"', query)
-    query = re.sub(r'"[^"]+"', '', query)
-    
+    query = re.sub(r'"[^"]+"', "", query)
+
     raw_terms = query.split()
-    neg_terms = [t[1:] for t in raw_terms if t.startswith('-') and len(t) > 1]
-    pos_terms_raw = [t for t in raw_terms if not t.startswith('-')]
-    
+    neg_terms = [t[1:] for t in raw_terms if t.startswith("-") and len(t) > 1]
+    pos_terms_raw = [t for t in raw_terms if not t.startswith("-")]
+
     # Handle OR logic and wildcards (*)
     pos_query = " ".join(pos_terms_raw)
     or_groups_raw = pos_query.split(" OR ")
-    
-    def term_to_regex(term):
-        return re.escape(term.lower()).replace(r'\*', '.*')
-        
-    or_groups =[]
+
+    def term_to_regex(term: str) -> str:
+        return re.escape(term.lower()).replace(r"\*", ".*")
+
+    or_groups = []
     for grp in or_groups_raw:
         terms = grp.split()
         if terms:
             or_groups.append([term_to_regex(t) for t in terms])
 
-    highlight_list = exact_phrases +[t.replace('*', '') for t in pos_terms_raw if t != 'OR']
-    results =[]
+    highlight_list = exact_phrases + [
+        t.replace("*", "") for t in pos_terms_raw if t != "OR"
+    ]
+    results = []
 
-    def scan_text(text, mag_rel_path, page_num):
+    def scan_text(text: str, mag_rel_path: str, page_num: int) -> None:
         # 1. Isolate text sections
-        clean_text = re.sub(r'^#\s?GA-TRANSCRIPTION\s*', '', text, flags=re.IGNORECASE)
-        parts = re.split(r'#\s?GA-TRANSLATION', clean_text, flags=re.IGNORECASE)
+        clean_text = re.sub(r"^#\s?GA-TRANSCRIPTION\s*", "", text, flags=re.IGNORECASE)
+        parts = re.split(r"#\s?GA-TRANSLATION", clean_text, flags=re.IGNORECASE)
         en_text, sum_text = "", ""
-        
+
         if len(parts) > 1:
             jp_text = parts[0]
-            sub = re.split(r'#\s?GA-SUMMARY', parts[1], flags=re.IGNORECASE)
+            sub = re.split(r"#\s?GA-SUMMARY", parts[1], flags=re.IGNORECASE)
             en_text = sub[0]
             sum_text = sub[1] if len(sub) > 1 else ""
         else:
-            sub = re.split(r'#\s?GA-SUMMARY', parts[0], flags=re.IGNORECASE)
+            sub = re.split(r"#\s?GA-SUMMARY", parts[0], flags=re.IGNORECASE)
             jp_text = sub[0]
             sum_text = sub[1] if len(sub) > 1 else ""
             if len(sub) > 1:
@@ -1876,19 +2065,26 @@ def search():
 
         # 2. Build searchable text based on toggles
         searchable_text = ""
-        if inc_jp: searchable_text += jp_text + " "
-        if inc_en: searchable_text += en_text + " "
-        if inc_sum: searchable_text += sum_text + " "
-        
-        if not searchable_text.strip(): return
+        if inc_jp:
+            searchable_text += jp_text + " "
+        if inc_en:
+            searchable_text += en_text + " "
+        if inc_sum:
+            searchable_text += sum_text + " "
+
+        if not searchable_text.strip():
+            return
         blob = searchable_text.lower()
 
         # 3. Process Negative Filters
-        if any(nep.lower() in blob for nep in neg_exact): return
-        if any(nt.lower() in blob for nt in neg_terms): return
+        if any(nep.lower() in blob for nep in neg_exact):
+            return
+        if any(nt.lower() in blob for nt in neg_terms):
+            return
 
         # 4. Process Exact Phrases
-        if any(ep.lower() not in blob for ep in exact_phrases): return
+        if any(ep.lower() not in blob for ep in exact_phrases):
+            return
 
         # 5. Process Positive Terms (AND / OR Groups)
         if or_groups:
@@ -1897,135 +2093,177 @@ def search():
                 if all(re.search(t_regex, blob) for t_regex in grp):
                     group_matched = True
                     break
-            if not group_matched: return
+            if not group_matched:
+                return
 
         # 6. Snippet Generation
         first_match = 0
         if exact_phrases:
             first_match = blob.find(exact_phrases[0].lower())
-        elif pos_terms_raw and pos_terms_raw[0] != 'OR':
+        elif pos_terms_raw and pos_terms_raw[0] != "OR":
             m = re.search(or_groups[0][0], blob) if or_groups and or_groups[0] else None
-            if m: first_match = m.start()
+            if m:
+                first_match = m.start()
 
         idx = max(0, first_match)
-        clean_val = searchable_text.replace('\\n', ' ').replace('\n', ' ')
-        snippet = clean_val[max(0, idx-40):min(len(clean_val), idx+60)]
+        clean_val = searchable_text.replace("\\n", " ").replace("\n", " ")
+        snippet = clean_val[max(0, idx - 40) : min(len(clean_val), idx + 60)]
         results.append({"mag": mag_rel_path, "page": page_num, "snippet": snippet})
 
     # Standard loop to search through files and ZIPs
     for mag_rel_path in METADATA_CACHE.keys():
-        if scope == 'current' and mag_rel_path != current_mag: continue
-        
-        meta = METADATA_CACHE.get(mag_rel_path, {})
-        
-        # 1. Magazine Name Filter
-        if mag_filter and mag_filter not in meta.get('name', '').lower():
+        if scope == "current" and mag_rel_path != current_mag:
             continue
-            
+
+        meta = METADATA_CACHE.get(mag_rel_path, {})
+
+        # 1. Magazine Name Filter
+        if mag_filter and mag_filter not in meta.get("name", "").lower():
+            continue
+
         # 1.5 Tags Filter
         if tag_filter:
-            meta_tags = meta.get('tags', '').lower()
-            if not all(t.strip() in meta_tags for t in tag_filter.split(',') if t.strip()):
+            meta_tags = meta.get("tags", "").lower()
+            if not all(
+                t.strip() in meta_tags for t in tag_filter.split(",") if t.strip()
+            ):
                 continue
-            
+
         # 2. Date Range Filter
         if date_start or date_end:
-            m_date = meta.get('date', '')
-            if not m_date: continue  # Skip if no date is found
-            
+            m_date = meta.get("date", "")
+            if not m_date:
+                continue  # Skip if no date is found
+
             norm_m_date = normalize_meta_date(m_date)
-            if not norm_m_date: continue
-            
-            if date_start and norm_m_date < date_start: continue
-            if date_end and norm_m_date > date_end: continue
+            if not norm_m_date:
+                continue
+
+            if date_start and norm_m_date < date_start:
+                continue
+            if date_end and norm_m_date > date_end:
+                continue
 
         pdf_path = DATA_DIR / mag_rel_path
-        
+
         for txt in pdf_path.parent.glob("*.txt"):
             m = re.search(r"_p(\d+)\.txt$", txt.name, re.IGNORECASE)
-            if m: scan_text(txt.read_text(encoding='utf-8', errors='ignore'), mag_rel_path, int(m.group(1)))
-            
+            if m:
+                scan_text(
+                    txt.read_text(encoding="utf-8", errors="ignore"),
+                    mag_rel_path,
+                    int(m.group(1)),
+                )
+
         partner_zip = get_partner_zip(mag_rel_path)
         if partner_zip:
             try:
-                with zipfile.ZipFile(partner_zip, 'r') as z:
+                with zipfile.ZipFile(partner_zip, "r") as z:
                     for zname in z.namelist():
                         if zname.lower().endswith(".txt"):
-                            m = re.search(r"_p(\d+)\.txt$", zname.split('/')[-1], re.IGNORECASE)
-                            if m: scan_text(z.read(zname).decode('utf-8', errors='ignore'), mag_rel_path, int(m.group(1)))
-            except: pass
-    
+                            m = re.search(
+                                r"_p(\d+)\.txt$", zname.split("/")[-1], re.IGNORECASE
+                            )
+                            if m:
+                                scan_text(
+                                    z.read(zname).decode("utf-8", errors="ignore"),
+                                    mag_rel_path,
+                                    int(m.group(1)),
+                                )
+            except:
+                pass
+
     return jsonify({"results": results[:200], "terms_to_highlight": highlight_list})
 
-@app.route('/api/bookmarks', methods=['GET', 'POST', 'DELETE'])
-def bookmarks_handler():
-    if not BOOKMARKS_FILE.exists(): BOOKMARKS_FILE.write_text("{}", encoding='utf-8')
-    bks = json.loads(BOOKMARKS_FILE.read_text(encoding='utf-8'))
-    if request.method == 'POST':
+
+@app.route("/api/bookmarks", methods=["GET", "POST", "DELETE"])
+def bookmarks_handler() -> Response:
+    if not BOOKMARKS_FILE.exists():
+        BOOKMARKS_FILE.write_text("{}", encoding="utf-8")
+    bks = json.loads(BOOKMARKS_FILE.read_text(encoding="utf-8"))
+    if request.method == "POST":
         d = request.json
         bks[f"{d['mag']}_{d['page']}"] = d
-    elif request.method == 'DELETE':
-        key = request.args.get('key')
-        if key in bks: del bks[key]
-    BOOKMARKS_FILE.write_text(json.dumps(bks), encoding='utf-8')
+    elif request.method == "DELETE":
+        key = request.args.get("key")
+        if key in bks:
+            del bks[key]
+    BOOKMARKS_FILE.write_text(json.dumps(bks), encoding="utf-8")
     return jsonify(bks)
 
-@app.route('/api/uninstall', methods=['POST'])
-def uninstall_mag():
+
+@app.route("/api/uninstall", methods=["POST"])
+def uninstall_mag() -> Response | tuple[Response, int]:
     data = request.json
-    pdf_filename = data.get('pdf_filename')
-    
+    pdf_filename = data.get("pdf_filename")
+
     # Find the actual path based on the filename
-    target_rel_path = next((f for f in METADATA_CACHE.keys() if f.endswith(pdf_filename)), None)
+    target_rel_path = next(
+        (f for f in METADATA_CACHE.keys() if f.endswith(pdf_filename)), None
+    )
     if not target_rel_path:
         return jsonify({"error": "File not found"}), 404
-        
+
     pdf_path = DATA_DIR / target_rel_path
     if pdf_path.exists():
         # 1. Find the partner ZIP and text files BEFORE deleting the PDF
         partner_zip = get_partner_zip(target_rel_path)
         loose_texts = list(pdf_path.parent.glob(f"{pdf_path.stem}_p*.txt"))
-        
+
         # 2. Delete the ZIP
         if partner_zip and partner_zip.exists():
-            try: os.remove(partner_zip)
-            except: pass
-            
+            try:
+                os.remove(partner_zip)
+            except Exception as e:
+                return jsonify({"error": f"Failed to delete ZIP: {e}"}), 500
+
         # 3. Delete loose text files
         for txt in loose_texts:
-            try: os.remove(txt)
-            except: pass
-            
+            try:
+                os.remove(txt)
+            except Exception as e:
+                return jsonify({"error": f"Failed to delete text file: {e}"}), 500
+
         # 4. Delete the PDF
-        try: os.remove(pdf_path)
-        except: pass
-            
+        try:
+            os.remove(pdf_path)
+        except Exception as e:
+            return jsonify({"error": f"Failed to delete PDF: {e}"}), 500
+
         # 5. Clean up the folder if it's now empty
         if pdf_path.parent != DATA_DIR:
             try:
                 if not any(pdf_path.parent.iterdir()):
                     pdf_path.parent.rmdir()
-            except: pass
-            
+            except Exception as e:
+                return jsonify({"error": f"Failed to clean up folder: {e}"}), 500
+
     load_metadata_cache()
     return jsonify({"status": "uninstalled"})
 
-@app.route('/api/ping')
-def ping():
+
+@app.route("/api/ping")
+def ping() -> str:
     global LAST_PING
     LAST_PING = time.time()
     return "ok"
 
-@app.route('/')
-def index(): return render_template_string(HTML_UI)
 
-def monitor_heartbeat():
+@app.route("/")
+def index() -> str:
+    return render_template_string(HTML_UI)
+
+
+def monitor_heartbeat() -> None:
     while True:
         time.sleep(5)
-        if time.time() - LAST_PING > 20: os._exit(0)
+        if time.time() - LAST_PING > 20:
+            os._exit(0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     load_metadata_cache()
     threading.Thread(target=monitor_heartbeat, daemon=True).start()
-    time.sleep(1); webbrowser.open("http://127.0.0.1:5000")
-    app.run(port=5000, debug=False)
+    time.sleep(1)
+    webbrowser.open(f"http://127.0.0.1:{SERVER_PORT}")
+    app.run(port=SERVER_PORT, debug=False)
