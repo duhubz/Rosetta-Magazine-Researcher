@@ -11,10 +11,15 @@ import time
 import urllib.request
 import webbrowser
 import zipfile
+import ssl
+import certifi
 from pathlib import Path
 
 import fitz  # PyMuPDF
 from flask import Flask, Response, jsonify, render_template_string, request, send_file
+
+# --- FIX FOR LINUX/MAC SSL CERTIFICATE ERRORS ---
+ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=certifi.where())
 
 app = Flask(__name__)
 
@@ -56,7 +61,7 @@ HTML_UI = r"""
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Gaming Alexandria Researcher</title>
+    <title>Rosetta Magazine Researcher</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root { 
