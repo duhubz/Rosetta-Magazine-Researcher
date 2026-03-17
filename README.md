@@ -1,4 +1,4 @@
-# Gaming Alexandria Researcher 📚
+# Rosetta Magazine Researcher 📚
 
 A fully offline-capable archive viewer with smart search, text formatting, and community catalogs to download magazines along with translations and transcriptions. Designed to seamlessly read scanned PDFs alongside transcribed text, English translations, and rich metadata.
 
