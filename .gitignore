@@ -1,3 +1,5 @@
 Covers
 Magazines
 *.json
+__pycache__/
+*.pyc

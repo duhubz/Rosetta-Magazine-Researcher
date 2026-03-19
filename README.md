@@ -81,6 +81,20 @@ To ensure the app splits your text into the correct boxes, you must use these ex
 (Summary goes here)
 ```
 
+**Consolidated Master File (_COMPLETE.txt):**
+Instead of hundreds of individual `_pXXX.txt` files, you can use a single `_COMPLETE.txt` file with `[[PAGE_XXX]]` markers. This reduces file I/O and speeds up search. The app prioritizes the master file when present, and falls back to individual files for backward compatibility.
+```text
+[[PAGE_001]]
+(Japanese text)
+#GA-TRANSLATION
+(English text)
+#GA-SUMMARY
+(Summary)
+
+[[PAGE_002]]
+...
+```
+
 ---
 
 ## 📄 Metadata Schema (metadata.txt)
@@ -153,11 +167,18 @@ Best for translation groups or creators who continuously release updates.
 }
 ```
 
+**The Transcription ZIP:**
+When you download a magazine from the Library, the app fetches two things: the scanned PDF and an optional **transcription ZIP**. The ZIP contains:
+- **Page text files** (e.g. `Magazine_01_p001.txt`) — one per page, with `#GA-TRANSCRIPTION`, `#GA-TRANSLATION`, and `#GA-SUMMARY` sections
+- **metadata.txt** — magazine metadata (name, publisher, date, tags, credits, etc.)
+
+The ZIP is downloaded from the URLs in `zip_sources` (defined in the catalog by the publisher). If `zip_sources` is empty or missing, the app skips the ZIP and you get only the PDF. The app tries each URL in order until one succeeds, so catalog authors can list backup mirrors.
+
 **Catalog Field Breakdown:**
 - `id`: *(Required)* Unique identifier.
 - `pdf_filename`: *(Required)* Exact file name the PDF saves as.
-- `pdf_sources`: *(Required)* Array of direct download URLs.
-- `zip_filename` & `zip_sources`: *(Optional)* Array of URLs to download the text/metadata ZIP.
+- `pdf_sources`: *(Required)* Array of direct download URLs for the PDF.
+- `zip_filename` & `zip_sources`: *(Optional)* Filename and array of URLs for the transcription/metadata ZIP. If omitted, defaults to `{pdf_stem}_Data.zip`.
 - `version`: Controls the "🔄 Update Available" badge. Compared against local metadata.txt.
 - `tags`: Comma-separated list (`"action, retro"`).
 - `scanner` & `editor`: *(Optional)* Credits for the community members.
@@ -165,6 +186,38 @@ Best for translation groups or creators who continuously release updates.
 - `notes`: *(Optional)* Special warnings or notes about the issue.
 - `adult_content`: `true` or `false`. Hides issue unless "18+ Content" is checked.
 - `original_language` & `translated_language`: Uses 2-letter codes (JP, EN) to generate flags.
+
+---
+
+## ⚙️ Configuration (config.yaml)
+
+You can customize the app by placing a `config.yaml` file next to the application (or executable). If the file is missing, sensible defaults are used. All paths are relative to the app root.
+
+```yaml
+server:
+  port: 18028              # Port for the local web server
+
+paths:
+  data_dir: Magazines      # Folder for downloaded magazines
+  bookmarks_file: bookmarks.json
+  catalog_file: catalog.json
+  catalogs_dir: Catalogs
+  covers_dir: Covers
+
+catalog:
+  urls:                    # Official catalog URLs (tried in order)
+    - https://www.gamingalexandria.com/ga-researcher/catalog.json
+    - https://archive.org/download/ga-researcher-files/catalog.json
+
+download:
+  timeout_seconds: 60      # Timeout for PDF/ZIP downloads
+  catalog_fetch_timeout: 10
+  cover_fetch_timeout: 5
+
+heartbeat:
+  shutdown_after_idle_seconds: 20   # Auto-exit when browser tab is closed
+  check_interval_seconds: 5
+```
 
 ---
 
