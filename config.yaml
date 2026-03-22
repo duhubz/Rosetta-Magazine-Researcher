@@ -1,0 +1,26 @@
+# Rosetta Magazine Researcher - Configuration
+# Paths are relative to the application root (next to the executable or app.py)
+
+server:
+  port: 18028  # 'Fl' in hex for Flatso
+
+paths:
+  data_dir: Magazines
+  bookmarks_file: bookmarks.json
+  catalog_file: catalog.json
+  catalogs_dir: Catalogs
+  covers_dir: Covers
+
+catalog:
+  urls:
+    - https://www.gamingalexandria.com/ga-researcher/catalog.json
+    - https://archive.org/download/ga-researcher-files/catalog.json
+
+download:
+  timeout_seconds: 60
+  catalog_fetch_timeout: 10
+  cover_fetch_timeout: 5
+
+heartbeat:
+  shutdown_after_idle_seconds: 20
+  check_interval_seconds: 5

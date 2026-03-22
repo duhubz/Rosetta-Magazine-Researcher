@@ -1,3 +1,4 @@
-Flask
-PyMuPDF
+Flask>=3.0,<4
+PyMuPDF>=1.24
 certifi
+PyYAML>=6.0
