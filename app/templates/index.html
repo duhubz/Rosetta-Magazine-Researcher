@@ -12,32 +12,124 @@
         body.light-mode {
             --bg: #f0f2f5; --panel: #ffffff; --text: #1c1e21; --box: #f8f9fa; --border: #dddfe2; --accent: #1a73e8;
         }
-        body { display: flex; height: 100vh; margin: 0; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
-        #main-container { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
-        
-        #left { 
-            flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; 
-            background: #000; position: relative; overflow: hidden; padding-bottom: 80px; 
+        body { 
+            display: flex; flex-direction: column; /* Changes app to a vertical stack */
+            height: 100vh; margin: 0; font-family: -apple-system, sans-serif; 
+            background: var(--bg); color: var(--text); overflow: hidden; 
         }
-        #img-container { position: relative; display: inline-block; cursor: crosshair; }
-        #page-img { max-width: 100%; max-height: calc(100vh - 120px); object-fit: contain; display: block; }
+
+        #main-container { 
+            display: flex; width: 100vw; flex: 1; /* Takes all remaining height above the toolbar */
+            overflow: hidden; 
+        }
         
-        #magnifier {
-            position: absolute; width: 280px; height: 280px; border: 3px solid var(--accent);
-            border-radius: 50%; pointer-events: none; display: none;
-            box-shadow: 0 0 20px rgba(0,0,0,0.8); background-repeat: no-repeat; z-index: 2000;
+        /* --- PERFECT ZOOM & PANNING CSS --- */
+        /* --- 1. FIXED IMAGE LAYOUT --- */
+        #left { 
+            flex: 1; min-width: 0; background: #000; position: relative; 
+            padding: 20px; box-sizing: border-box;
+            overflow: auto; 
+            display: flex; align-items: center; justify-content: center; /* Flexbox centering */
+        }
+        
+        #img-container { 
+            position: relative; 
+            margin: auto; /* MAGIC FIX: Prevents Flexbox from clipping the top/left when zoomed in! */
+            /* Removed container-type from here! */
+        }
+        
+        #page-img { 
+            width: auto; 
+            max-width: none !important; 
+            max-height: none !important; 
+            display: block; 
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            transition: height 0.15s ease-out; 
+        }
+        
+        .controls { 
+            /* Replaced position: fixed with a standard structural footer layout */
+            width: 100vw; flex-shrink: 0; box-sizing: border-box;
+            background: #202124; padding: 10px 20px; 
+            display: flex; gap: 15px; align-items: center; justify-content: center; 
+            border-top: 1px solid #3c4043; color: white; z-index: 3000;
+            flex-wrap: wrap; /* Safely wraps to a second row only if the window gets super small */
+        }
+
+        .show-all-zones .spatial-box {
+            opacity: 1.0 !important;
+            border-style: dashed !important;
+        }
+
+        .spatial-box {
+            position: absolute;
+            border: 2px solid rgba(0, 212, 255, 0.9); 
+            background-color: rgba(0, 212, 255, 0.15); 
+            opacity: 0;
+            transition: opacity 0.15s ease-in-out, background-color 0.15s;
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 10;
+            border-radius: 4px;
+            /* CHANGED: Looks at both Width AND Height now! */
+            container-type: size; 
+        }
+
+        .spatial-box .manga-text { display: none; }
+
+        .manga-mode .spatial-box {
+            background: var(--panel) !important;
+            border: 2px solid var(--border) !important;
+            opacity: 1 !important;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            box-sizing: border-box;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        
+        .manga-mode .spatial-box .manga-text {
+            display: block;
+            color: var(--text);
+            font-weight: 600;
+            text-align: center;
+            overflow-y: auto;
+            max-height: 100%;
+            width: 100%;
+            -ms-overflow-style: none; scrollbar-width: none;
+            
+            /* CHANGED: Uses 'cqmin' (Container Query Minimum). 
+               It finds the smallest dimension (width or height) and sets the font to 14% of it.
+               The clamp() safely prevents text from getting smaller than 10px or larger than 80px! */
+            font-size: clamp(10px, 14cqmin, 80px); 
+            line-height: 1.3;
+            word-break: break-word; /* Ensures long words wrap cleanly inside tight boxes */
+        }
+
+        .manga-mode .spatial-box .manga-text::-webkit-scrollbar { display: none; }
+
+        @keyframes searchPulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.8); background-color: rgba(255, 82, 82, 0.4); opacity: 1; border-color: #ff5252; }
+            70% { box-shadow: 0 0 0 15px rgba(255, 82, 82, 0); background-color: rgba(255, 82, 82, 0.1); opacity: 1; border-color: #ff5252; }
+            100% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0); background-color: rgba(255, 82, 82, 0.4); opacity: 1; border-color: #ff5252; }
+        }
+        .spatial-box.search-pulse {
+            animation: searchPulse 1.5s infinite;
+            z-index: 30;
+        }
+        
+        .spatial-box.active-highlight {
+            opacity: 1;
+            background-color: rgba(0, 212, 255, 0.35); 
+            box-shadow: 0 0 12px rgba(0, 212, 255, 0.8);
         }
 
         #middle { flex: 1.2; min-width: 0; padding: 30px; overflow-y: auto; background: var(--panel); box-sizing: border-box; border-left: 1px solid var(--border); }
         .sidebar { width: 340px; height: 100%; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
         .sidebar.collapsed { display: none; }
         
-        .controls { 
-            position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%); 
-            background: #202124; padding: 10px 22px; border-radius: 50px; 
-            display: flex; gap: 12px; align-items: center; border: 1px solid #3c4043;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 3000; color: white; white-space: nowrap;
-        }
         .ctrl-btn { background: #444; color: white; border: none; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 600; transition: 0.2s; }
         .ctrl-btn:hover, .ctrl-btn.active { background: var(--accent); color: #202124; }
         select, input[type=number], input[type=text] { background: #323639; color: white; border: 1px solid #5f6368; padding: 5px 10px; border-radius: 4px; outline: none; }
@@ -62,7 +154,6 @@
         .del-bk { position: absolute; top: 10px; right: 10px; opacity: 0.4; cursor: pointer; }
         .del-bk:hover { opacity: 1; color: #ff4d4d; }
 
-        /* NETFLIX LIBRARY OVERLAY */
         #library-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: var(--bg); z-index: 4000; overflow-y: auto; display: none; flex-direction: column;
@@ -131,7 +222,6 @@
         <div id="left">
             <div id="img-container">
                 <img id="page-img" src="">
-                <div id="magnifier"></div>
             </div>
         </div>
         <div id="middle">
@@ -286,15 +376,15 @@
         <div class="divider"></div>
         <button id="help-btn" class="ctrl-btn" onclick="toggleHelp()">❓ Help</button>
         <button id="theme-btn" class="ctrl-btn" onclick="toggleTheme()">☀️</button>
+        <button id="zones-btn" class="ctrl-btn" onclick="toggleZones()">👁️ Zones</button>
+        <button id="manga-btn" class="ctrl-btn" onclick="toggleMangaMode()">💬 Manga</button>
         <button id="md-toggle" class="ctrl-btn active" onclick="toggleMarkdown()">MD</button>
         <button id="edit-btn" class="ctrl-btn" onclick="toggleEdit()">✏️ Edit</button>
         <button id="save-btn" class="ctrl-btn" style="display:none; background:#28a745;" onclick="saveCorrections()">💾 Save</button>
         <button id="bookmark-btn" class="ctrl-btn" onclick="toggleBookmark()">⭐</button>
         <div class="divider"></div>
-        <!-- The new searchable input -->
         <input type="text" id="mag-input" list="mag-select-list" style="width:260px; text-overflow: ellipsis;" placeholder="Search installed..." onclick="this.select()">
         <datalist id="mag-select-list"></datalist>
-        <!-- The old select, hidden but still holding the backend data -->
         <select id="mag-select" style="display:none;"></select>
         
         <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
@@ -302,7 +392,12 @@
         <button class="ctrl-btn" onclick="changePage(1)">Next</button>
         <div class="divider"></div>
         <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size: 11px; color: #9aa0a6;">Font</span>
+    <button class="ctrl-btn" onclick="adjustImgZoom(-15)">🔍-</button>
+    <input type="text" id="zoom-input" value="100%" style="width: 45px; text-align: center; font-size: 11px; padding: 2px; background: transparent; border: 1px solid #5f6368; color: #9aa0a6; outline: none; border-radius: 4px;" onchange="setImgZoom(this.value)" onclick="this.select()">
+    <button class="ctrl-btn" onclick="adjustImgZoom(15)">🔍+</button>
+    <div class="divider"></div>
+
+    <span style="font-size: 11px; color: #9aa0a6;">Font</span>
             <input type="range" min="12" max="40" value="17" oninput="updateFont(this.value)">
             <label class="check-item"><input type="checkbox" id="check-jp" checked onchange="toggleSec('sec-jp-container', this.checked)"> Transcription</label>
             <label class="check-item"><input type="checkbox" id="check-en" checked onchange="toggleSec('sec-en-container', this.checked)"> Translation</label>
@@ -324,9 +419,15 @@ Welcome to the Gaming Alexandria Researcher! Use the **Library** to download new
 
 **To safely close the application**, simply close your browser tab! The background server will automatically shut down after 20 seconds to save memory.
 
-### Viewer Controls
-- **Keyboard Navigation:** Use the **Left/Right Arrows** to change pages, and **Page Up/Page Down** to scroll the text boxes!
-- **Zoom & Formatting:** Hover your mouse over a page to zoom. Click the **MD** button to toggle between formatted markdown and raw text.
+## 🎮 Viewer Controls & Interactive Reading
+This app features a fully interactive spatial mapping engine. The English translations are mathematically tied to the original Japanese text on the scanned pages!
+- **Interactive Hovering:** If the magazine has a coordinates json included move your mouse over a translation in the sidebar to see the exact Japanese text light up in cyan on the PDF. 
+- **Reverse Lookup (Click-to-Scroll):** If the magazine has a coordinates json included hover your mouse over the PDF image itself to see the text boundaries. Click any cyan box on the image, and the sidebar will automatically scroll down and flash the correct English translation!
+- **💬 Manga Mode:** If the magazine has a coordinates json included click the Manga button on the toolbar to dynamically paint over the Japanese text on the PDF and inject the English translations directly onto the page like a scanlated comic book!
+- **👁️ Zones Toggle:** If the magazine has a coordinates json included click the Zones button to see a dashed "heat map" of exactly where the AI detected text on the page.
+- **Native Zoom & Pan:** Use the **🔍+** and **🔍-** buttons, or hold **Ctrl + Mouse Wheel** to zoom the PDF in and out up to 500%. You can also use standard Acrobat keyboard shortcuts (Ctrl +, Ctrl -, Ctrl 0).
+- **Keyboard Navigation:** Use the **Left/Right Arrows** to change pages.
+- **Formatting:** Click the **MD** button to toggle between formatted markdown and raw text. (Recommended!)
 - **Font Size & Theme:** Use the slider at the bottom to adjust text size, and the ☀️ button to switch between Dark and Light mode.
 - **Bookmarks:** Click the ⭐ button to save your current page. You can add custom tags to your bookmarks to easily filter them in the Bookmarks sidebar tab!
 - **Editing:** Click **✏️ Edit** to fix typos in the translation or update the magazine's tags/metadata. Click **Save** when done!
@@ -338,6 +439,7 @@ Welcome to the Gaming Alexandria Researcher! Use the **Library** to download new
 - **Exclude Words:** Use a minus sign (\`-boring\`)
 - **Wildcards:** Use an asterisk (\`translat*\` matches *translator* and *translating*)
 - **Filter by Section:** Use the checkboxes in the sidebar to search *only* the Summaries or *only* the English Translations.
+- **Spatial Highlights:** When you click a search result, if the magazine has a coordinates json included the app will instantly turn to that page, auto-scroll the PDF to the exact location of the word, and flash a red siren box over the text so you never lose your place!
 - **Adult Content:** In the Library, magazines tagged as 18+/NSFW are hidden by default. Check the "18+ Content" box to include mature content in your Library view.
 
 ### Advanced Date Searching
@@ -364,12 +466,13 @@ For the app to link your PDF with its transcriptions and metadata, they need to 
 
 Here is how your folder should look:
 \`\`\`text
+Here is how your folder should look:
 📁 Magazines
   └── 📁 Super Mario Magazine
        ├── Super_Mario_01.pdf           <-- The scanned magazine
-       ├── Super_Mario_01.zip           <-- (Optional) ZIP containing text files and metadata.txt
-       ├── Super_Mario_01_p001.txt      <-- (If not using a ZIP) Page 1 text
-       ├── Super_Mario_01_p002.txt      <-- (If not using a ZIP) Page 2 text
+       ├── Super_Mario_01.zip           <-- (Optional) ZIP containing text files, JSON, and metadata
+       ├── Super_Mario_01_COMPLETE.txt  <-- (If not using a ZIP) The master translation file
+       ├── Super_Mario_01_COORDINATES.json <-- (If not using a ZIP) The spatial mapping data
        └── metadata.txt                 <-- (If not using a ZIP) Magazine details
 \`\`\`
 *(Note: If you name a file \`Super_Mario_01.metadata.txt\`, it will apply specifically to that PDF!)*
@@ -494,7 +597,6 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
         
         const pageInput = document.getElementById('page-num');
         const img = document.getElementById('page-img');
-        const lens = document.getElementById('magnifier');
         const container = document.getElementById('img-container');
 
         let isEditing = false;
@@ -542,6 +644,40 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             lens.style.backgroundSize = (rect.width * lensZoomFactor) + "px " + (rect.height * lensZoomFactor) + "px";
             lens.style.backgroundPosition = "-" + (x * lensZoomFactor - lens.offsetWidth / 2) + "px -" + (y * lensZoomFactor - lens.offsetHeight / 2) + "px";
         }
+
+        // ==========================================
+        // NATIVE IMAGE ZOOM LOGIC
+        // ==========================================
+        let currentImgZoom = 100;
+        
+        function adjustImgZoom(delta) {
+            setImgZoom(currentImgZoom + delta);
+        }
+
+        function setImgZoom(val) {
+            // Strip out the '%' if they typed it, and convert to a number
+            let num = parseInt(String(val).replace('%', ''));
+            if (isNaN(num)) num = 100; // Fallback if they type letters
+            
+            // Clamp zoom between 30% and 500%
+            currentImgZoom = Math.max(30, Math.min(num, 500));
+            
+            const img = document.getElementById('page-img');
+            const leftPanel = document.getElementById('left');
+            const safeHeight = leftPanel.clientHeight - 40; 
+            
+            img.style.height = `${safeHeight * (currentImgZoom / 100)}px`;
+            document.getElementById('zoom-input').value = `${currentImgZoom}%`;
+        }
+
+        window.addEventListener('resize', () => { adjustImgZoom(0); });
+
+        document.getElementById('left').addEventListener('wheel', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault(); 
+                adjustImgZoom(e.deltaY < 0 ? 10 : -10);
+            }
+        }, { passive: false });
 
         async function init(forceUpdate = false) {
             const res = await fetch('/api/list');
@@ -602,6 +738,62 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             if(localFiles.length === 0 && forceUpdate) {
                 document.getElementById('library-overlay').style.display = 'flex';
             }
+        }
+
+let isMangaMode = false;
+        function toggleMangaMode() {
+            isMangaMode = !isMangaMode;
+            document.getElementById('img-container').classList.toggle('manga-mode', isMangaMode);
+            document.getElementById('manga-btn').classList.toggle('active', isMangaMode);
+        }
+
+        // Triggered when a search result is clicked
+        function triggerSearchHighlight(termsArray) {
+            if (!termsArray || termsArray.length === 0 || !window.currentBoxAssignments) return;
+            
+            let foundBox = null;
+            let foundEl = null;
+            const allBoxes = document.querySelectorAll('.spatial-box');
+
+            allBoxes.forEach(box => {
+                box.classList.remove('search-pulse'); // Clear any old pulses
+                const idx = window.currentBoxAssignments.get(box);
+                if (idx === undefined) return;
+
+                const jpText = window.currentJpElements[idx]?.innerText.toLowerCase() || "";
+                const enText = window.currentEnElements[idx]?.innerText.toLowerCase() || "";
+
+                // Check if any of the search terms are inside this specific text block
+                const matches = termsArray.some(term => {
+                    const cleanTerm = term.toLowerCase();
+                    return jpText.includes(cleanTerm) || enText.includes(cleanTerm);
+                });
+
+                if (matches) {
+                    box.classList.add('search-pulse'); // FIRE THE LAZER!
+                    if (!foundBox) {
+                        foundBox = box;
+                        foundEl = window.currentEnElements[idx] || window.currentJpElements[idx];
+                    }
+                }
+            });
+
+            // Smoothly scroll the UI to the first match we found!
+            if (foundBox) {
+                foundBox.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                if (foundEl) {
+                    foundEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Flash the sidebar text red so they see it
+                    foundEl.style.transition = "background-color 0.3s";
+                    foundEl.style.backgroundColor = "rgba(255, 82, 82, 0.3)";
+                    setTimeout(() => foundEl.style.backgroundColor = "", 2000);
+                }
+            }
+        }
+
+        function toggleZones() { 
+            document.getElementById('img-container').classList.toggle('show-all-zones'); 
+            document.getElementById('zones-btn').classList.toggle('active');
         }
         
         function toggleHelp(forceOpen = false) {
@@ -1004,20 +1196,24 @@ function renderLibrary() {
             if (document.body.clientWidth < 800) document.getElementById('sidebar').classList.add('collapsed'); 
         }
 
-        async function update(targetPage = null) {
+        async function update(targetPage = null, searchTerms = null) {
+            if (searchTerms) window.activeSearchTerms = searchTerms;
+            else window.activeSearchTerms = null;
             if (targetPage) pageInput.value = targetPage;
             const mag = magSelect.value;
             const page = pageInput.value;
             if(!mag) return;
-            // Sync the visible search box with the active magazine
             document.getElementById('mag-input').value = pathToLabel[mag] || "";
             
             img.src = `/api/render?mag=${encodeURIComponent(mag)}&page=${page-1}&zoom=1.5&t=${Date.now()}`;
-            lens.style.backgroundImage = `url('/api/render?mag=${encodeURIComponent(mag)}&page=${page-1}&zoom=${lensZoomFactor}')`;
             
+            adjustImgZoom(0);
+
             const res = await fetch(`/api/text?mag=${encodeURIComponent(mag)}&page=${page}`);
             currentRawData = await res.json();
             maxPage = currentRawData.total_pages;
+            
+            drawCoordinateBoxes(currentRawData.coordinates);
             
             renderContent();
             renderMetadata(currentRawData.metadata, page, mag);
@@ -1071,6 +1267,14 @@ function renderLibrary() {
                 const el = document.getElementById(id);
                 if (isMarkdown) { el.innerHTML = marked.parse(text); el.classList.add('markdown-mode'); }
                 else { el.innerText = text; el.classList.remove('markdown-mode'); }
+            }
+            
+            if (isMarkdown && currentRawData.coordinates && currentRawData.coordinates.length > 0) {
+                attachTextHoverMagic();
+                
+                if (window.activeSearchTerms) {
+                    setTimeout(() => triggerSearchHighlight(window.activeSearchTerms), 100);
+                }
             }
         }
 
@@ -1221,7 +1425,7 @@ function renderLibrary() {
                 if (meta.issue_name) resultTitle += ` - ${meta.issue_name}`;
 
                 div.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:11px;">${resultTitle} — P${r.page}</span><br><small>...${snip}...</small>`;
-                div.onclick = () => { magSelect.value = r.mag; update(r.page); };
+                div.onclick = () => { magSelect.value = r.mag; update(r.page, data.terms_to_highlight); };
                 container.appendChild(div);
             });
         }
@@ -1257,19 +1461,23 @@ function renderLibrary() {
             const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
             if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
             
-            // 2. Do nothing if a menu popup is open (Library, Help, etc.)
+            // 2. Do nothing if a menu popup is open
             const lib = document.getElementById('library-overlay');
             const mod = document.getElementById('modal-overlay');
             const help = document.getElementById('help-overlay');
             if ((lib && lib.style.display === 'flex') || (mod && mod.style.display === 'flex') || (help && help.style.display === 'flex')) return;
 
-            // 3. Trigger actions based on the key pressed
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === '=' || e.key === '+') { e.preventDefault(); adjustImgZoom(15); return; }
+                if (e.key === '-') { e.preventDefault(); adjustImgZoom(-15); return; }
+                if (e.key === '0') { e.preventDefault(); currentImgZoom = 100; adjustImgZoom(0); return; }
+            }
+
+            // 3. Page Navigation & Scrolling
             if (e.key === 'ArrowLeft') { 
-                e.preventDefault(); 
-                changePage(-1); 
+                e.preventDefault(); changePage(-1); 
             } else if (e.key === 'ArrowRight') { 
-                e.preventDefault(); 
-                changePage(1); 
+                e.preventDefault(); changePage(1); 
             } else if (e.key === 'PageUp') { 
                 e.preventDefault(); 
                 const mid = document.getElementById('middle');
@@ -1301,6 +1509,203 @@ function renderLibrary() {
         });
 
         pageInput.onchange = () => { update(); pageInput.blur(); };
+
+        function drawCoordinateBoxes(coordinatesArray) {
+            const container = document.getElementById('img-container');
+            if (!container) return;
+
+            // 1. Clear old boxes from the previous page
+            container.querySelectorAll('.spatial-box').forEach(box => box.remove());
+
+            // 2. Draw new boxes
+            if (!coordinatesArray || coordinatesArray.length === 0) return;
+
+            // --- THE FIX: BOX PADDING ---
+            // Gemini uses a 0-1000 grid. "5" equals a 0.5% expansion. 
+            // Increase this to 10 or 15 if you want the boxes to be even looser!
+            const padding = 5; 
+
+            coordinatesArray.forEach((item, index) => {
+                // Apply the padding, but use Math.max/min to ensure boxes don't get pushed off the edge of the PDF!
+                const ymin = Math.max(0, item.box[0] - padding) / 10;
+                const xmin = Math.max(0, item.box[1] - padding) / 10;
+                const ymax = Math.min(1000, item.box[2] + padding) / 10;
+                const xmax = Math.min(1000, item.box[3] + padding) / 10;
+
+                const boxDiv = document.createElement('div');
+                boxDiv.className = 'spatial-box';
+                
+                boxDiv.style.top = `${ymin}%`;
+                boxDiv.style.left = `${xmin}%`;
+                boxDiv.style.height = `${ymax - ymin}%`;
+                boxDiv.style.width = `${xmax - xmin}%`;
+                
+                boxDiv.dataset.jpText = item.text.trim();
+                boxDiv.dataset.index = index; 
+
+                container.appendChild(boxDiv);
+            });
+        }
+
+        function attachTextHoverMagic() {
+            const allSpatialBoxes = Array.from(document.querySelectorAll('.spatial-box'));
+            if (allSpatialBoxes.length === 0) return;
+
+            // Target specific DOM elements so Japanese and English indices match 1:1
+            const selectors = 'p, h1, h2, h3, h4, h5, h6, li, th, td';
+            const jpElements = Array.from(document.getElementById('jp-box').querySelectorAll(selectors));
+            const enElements = Array.from(document.getElementById('en-box').querySelectorAll(selectors));
+
+            // Aggressively clean strings to ensure formatting differences don't ruin the math
+            function cleanString(str) {
+                if (!str) return "";
+                return str.replace(/[\s\n\r\t.,!?'"()\[\]{}:;*-_　、。！？「」『』（）]/g, '').toLowerCase();
+            }
+
+            const jpTexts = jpElements.map(el => cleanString(el.innerText));
+
+            // Helper function to calculate the Longest Common Substring between two texts
+            function getOverlapLength(s1, s2) {
+                if (!s1 || !s2) return 0;
+                // Fast path: If one is a perfect substring of the other!
+                if (s1.includes(s2)) return s2.length;
+                if (s2.includes(s1)) return s1.length;
+
+                // Matrix path: Finds the longest sequence of matching characters
+                let maxLen = 0;
+                const dp = Array(s2.length + 1).fill(0);
+                for (let i = 1; i <= s1.length; i++) {
+                    let prev = 0;
+                    for (let j = 1; j <= s2.length; j++) {
+                        let temp = dp[j];
+                        if (s1[i - 1] === s2[j - 1]) {
+                            dp[j] = prev + 1;
+                            if (dp[j] > maxLen) maxLen = dp[j];
+                        } else { dp[j] = 0; }
+                        prev = temp;
+                    }
+                }
+                return maxLen;
+            } // <--- The curly brace was missing here earlier!
+
+            // ==========================================
+            // PRE-CALCULATE: Assign each Box to the BEST Japanese DOM Element
+            // ==========================================
+            const boxAssignments = new Map(); // box -> index of best jpElement
+
+            allSpatialBoxes.forEach(box => {
+                const boxText = cleanString(box.dataset.jpText);
+                if (!boxText) return;
+
+                let bestIndex = -1;
+                let bestRatio = 0;
+
+                jpTexts.forEach((jpText, idx) => {
+                    if (!jpText) return;
+                    const overlap = getOverlapLength(boxText, jpText);
+                    if (overlap === 0) return;
+
+                    // Dice Coefficient Ratio: (2 * Match) / (Total Length)
+                    const ratio = (2 * overlap) / (boxText.length + jpText.length);
+
+                    if (ratio > bestRatio) {
+                        bestRatio = ratio;
+                        bestIndex = idx;
+                    }
+                });
+
+                // Assign the box to the paragraph it matched with best!
+                if (bestIndex !== -1 && bestRatio > 0.1) {
+                    boxAssignments.set(box, bestIndex);
+                }
+            });
+
+            // ==========================================
+            // APPLY HOVER LOGIC
+            // ==========================================
+            jpElements.forEach((el, index) => {
+                el.addEventListener('mouseenter', () => {
+                    allSpatialBoxes.forEach(box => {
+                        if (boxAssignments.get(box) === index) box.classList.add('active-highlight');
+                    });
+                });
+                el.addEventListener('mouseleave', () => {
+                    allSpatialBoxes.forEach(box => box.classList.remove('active-highlight'));
+                });
+            });
+
+            enElements.forEach((el, index) => {
+                el.addEventListener('mouseenter', () => {
+                    const correspondingJpElement = jpElements[index];
+                    if (correspondingJpElement) {
+                        correspondingJpElement.style.backgroundColor = "rgba(138, 180, 248, 0.15)";
+                    }
+                    allSpatialBoxes.forEach(box => {
+                        if (boxAssignments.get(box) === index) box.classList.add('active-highlight');
+                    });
+                });
+                
+                el.addEventListener('mouseleave', () => {
+                    const correspondingJpElement = jpElements[index];
+                    if (correspondingJpElement) {
+                        correspondingJpElement.style.backgroundColor = "";
+                    }
+                    allSpatialBoxes.forEach(box => box.classList.remove('active-highlight'));
+                });
+            });
+
+            // ==========================================
+            // REVERSE HOVER & CLICK (PDF -> Sidebar)
+            // ==========================================
+            allSpatialBoxes.forEach(box => {
+                const targetIndex = boxAssignments.get(box);
+                if (targetIndex === undefined) return;
+
+                // 1. Reverse Hover
+                box.addEventListener('mouseenter', () => {
+                    box.classList.add('active-highlight');
+                    if (jpElements[targetIndex]) jpElements[targetIndex].style.backgroundColor = "rgba(0, 212, 255, 0.2)";
+                    if (enElements[targetIndex]) enElements[targetIndex].style.backgroundColor = "rgba(0, 212, 255, 0.2)";
+                });
+
+                box.addEventListener('mouseleave', () => {
+                    box.classList.remove('active-highlight');
+                    if (jpElements[targetIndex]) jpElements[targetIndex].style.backgroundColor = "";
+                    if (enElements[targetIndex]) enElements[targetIndex].style.backgroundColor = "";
+                });
+
+                // 2. Click / Touch Support (Scrolls the sidebar to the translation!)
+                box.addEventListener('click', (e) => {
+                    e.preventDefault(); 
+                    
+                    const targetEl = enElements[targetIndex] || jpElements[targetIndex];
+                    if (targetEl) {
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        targetEl.style.transition = "background-color 0.3s";
+                        targetEl.style.backgroundColor = "rgba(0, 212, 255, 0.5)";
+                        setTimeout(() => targetEl.style.backgroundColor = "", 1200);
+                    }
+                });
+            });
+
+            // ==========================================
+            // MAGIC PART 4: Expose data for Search & Inject Manga Text
+            // ==========================================
+            window.currentBoxAssignments = boxAssignments;
+            window.currentJpElements = jpElements;
+            window.currentEnElements = enElements;
+
+            allSpatialBoxes.forEach(box => {
+                const targetIndex = boxAssignments.get(box);
+                if (targetIndex !== undefined && enElements[targetIndex]) {
+                    const span = document.createElement('span');
+                    span.className = 'manga-text';
+                    span.innerText = enElements[targetIndex].innerText;
+                    box.appendChild(span);
+                }
+            });
+        }
+
         init(true);
     </script>
 </body>

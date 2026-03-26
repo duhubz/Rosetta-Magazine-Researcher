@@ -112,6 +112,28 @@ def get_text():
         elif generic_meta.exists() and pdf_path.parent != data_dir:
             raw_meta = generic_meta.read_text(encoding="utf-8", errors="ignore")
 
+    coords_data =[]
+    
+    if partner_zip:
+        try:
+            with zipfile.ZipFile(partner_zip, "r") as z:
+                coords_file = next((n for n in z.namelist() if n.endswith("_COORDINATES.json")), None)
+                if coords_file:
+                    all_coords = json.loads(z.read(coords_file).decode("utf-8"))
+                    # Find the array for the specific page being requested
+                    coords_data = next((c.get("data",[]) for c in all_coords if str(c.get("page")) == str(int(pg))),[])
+        except Exception:
+            pass
+
+    if not coords_data:
+        loose_coords = next(pdf_path.parent.glob("*_COORDINATES.json"), None)
+        if loose_coords:
+            try:
+                all_coords = json.loads(loose_coords.read_text(encoding="utf-8"))
+                coords_data = next((c.get("data",[]) for c in all_coords if str(c.get("page")) == str(int(pg))),[])
+            except Exception:
+                pass
+
     return jsonify(
         {
             "jp": jp,
@@ -120,6 +142,7 @@ def get_text():
             "total_pages": total,
             "metadata": meta,
             "raw_meta": raw_meta,
+            "coordinates": coords_data,
         }
     )
 
