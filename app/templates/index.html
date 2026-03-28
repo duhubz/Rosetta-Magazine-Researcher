@@ -282,7 +282,7 @@
         .scanner-link:hover { text-decoration: underline; }
         .meta-edit-card {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
             gap: 16px;
             background: rgba(253, 230, 138, 0.08);
@@ -290,9 +290,38 @@
             border-radius: 8px;
             padding: 14px 16px;
         }
-        .meta-edit-copy { min-width: 0; }
+        .meta-edit-copy { min-width: 0; width: 100%; }
         .meta-edit-title { font-size: 13px; font-weight: 700; color: #fde68a; margin-bottom: 4px; }
         .meta-edit-summary { color: #d1d5db; font-size: 12px; line-height: 1.5; }
+        .meta-preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 12px;
+        }
+        .meta-preview-table th,
+        .meta-preview-table td {
+            border-top: 1px solid rgba(253, 230, 138, 0.22);
+            padding: 8px 0;
+            vertical-align: top;
+        }
+        .meta-preview-table th {
+            width: 180px;
+            text-align: left;
+            color: #fde68a;
+            font-weight: 700;
+            padding-right: 14px;
+        }
+        .meta-preview-table td {
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .meta-preview-empty {
+            margin-top: 12px;
+            color: #9aa0a6;
+            font-size: 12px;
+        }
         .editor-modal-content {
             width: min(1100px, 96vw);
             max-width: min(1100px, 96vw);
@@ -453,6 +482,10 @@
         @media (max-width: 780px) {
             .metadata-grid { grid-template-columns: 1fr; }
             .meta-edit-card { flex-direction: column; align-items: flex-start; }
+            .meta-preview-table th,
+            .meta-preview-table td { display: block; width: auto; }
+            .meta-preview-table th { padding-bottom: 2px; }
+            .meta-preview-table td { padding-top: 0; padding-bottom: 10px; }
             .editor-modal-header-main { flex-direction: column; align-items: flex-start; }
             .editor-mode-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
             .editor-modal-header,
@@ -512,10 +545,10 @@
                 </div>
                 <div class="meta-edit-card">
                     <div class="meta-edit-copy">
-                        <div class="meta-edit-title">Structured metadata editor</div>
+                        <div class="meta-edit-title">Current metadata</div>
                         <div id="meta-edit-summary" class="meta-edit-summary">No metadata saved yet.</div>
+                        <div id="meta-edit-preview" class="meta-preview-empty">No metadata saved yet.</div>
                     </div>
-                    <button class="modal-btn primary" type="button" onclick="openMetadataEditor()">Open Metadata Form</button>
                 </div>
                 <textarea id="meta-edit" rows="6" style="display:none;"></textarea>
             </div>
@@ -1087,8 +1120,18 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             return lines.join('\n');
         }
 
+        function escapeHtml(value = "") {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function updateMetadataSummary() {
             const summaryEl = document.getElementById('meta-edit-summary');
+            const previewEl = document.getElementById('meta-edit-preview');
             const rawText = document.getElementById('meta-edit').value || "";
             const { fields, extraLines } = parseMetadataText(rawText);
             const populatedCount = METADATA_FIELDS.filter(({ key }) => fields[key]).length;
@@ -1102,6 +1145,8 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 
             if (!headline && populatedCount === 0 && extraCount === 0) {
                 summaryEl.innerText = "No metadata saved yet.";
+                previewEl.className = 'meta-preview-empty';
+                previewEl.innerText = "No metadata saved yet.";
                 return;
             }
 
@@ -1111,6 +1156,27 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             ].filter(Boolean).join(' • ');
 
             summaryEl.innerText = [headline, stats].filter(Boolean).join(' — ');
+
+            const rows = METADATA_FIELDS
+                .filter(({ key }) => fields[key])
+                .map(({ label, key }) => `
+                    <tr>
+                        <th scope="row">${escapeHtml(label)}</th>
+                        <td>${escapeHtml(fields[key])}</td>
+                    </tr>
+                `);
+
+            if (extraCount) {
+                rows.push(`
+                    <tr>
+                        <th scope="row">Additional Raw Lines</th>
+                        <td>${escapeHtml(extraLines)}</td>
+                    </tr>
+                `);
+            }
+
+            previewEl.className = '';
+            previewEl.innerHTML = `<table class="meta-preview-table"><tbody>${rows.join('')}</tbody></table>`;
         }
 
         function ensureContentEditor() {
