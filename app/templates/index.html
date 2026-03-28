@@ -301,6 +301,16 @@
             min-height: min(620px, calc(100vh - 32px));
             flex-direction: column;
         }
+        .metadata-modal-content {
+            width: min(980px, 96vw);
+            max-width: min(980px, 96vw);
+            height: min(940px, calc(100vh - 32px));
+            max-height: calc(100vh - 32px);
+            min-height: min(700px, calc(100vh - 32px));
+        }
+        .metadata-modal-content .editor-modal-body {
+            overflow-y: auto;
+        }
         .editor-modal-header,
         .editor-modal-footer {
             padding: 18px 24px;
@@ -413,6 +423,7 @@
         body.light-mode .metadata-field input,
         body.light-mode .metadata-field textarea { background: #fff; }
         .metadata-field textarea { min-height: 108px; resize: vertical; }
+        #meta-extra-lines { min-height: 170px; }
         .editor-modal-content .toastui-editor-defaultUI {
             border-color: var(--border);
             border-radius: 10px;
@@ -658,7 +669,7 @@
     </div>
 
     <div id="metadata-modal-overlay" class="modal-overlay" onclick="closeMetadataEditor(event)">
-        <div class="modal-content editor-modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content editor-modal-content metadata-modal-content" onclick="event.stopPropagation()">
             <div class="editor-modal-header">
                 <div>
                     <h2 style="margin:0; color:#fde68a; font-size:22px;">Metadata Editor</h2>
