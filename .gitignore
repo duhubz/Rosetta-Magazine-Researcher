@@ -11,3 +11,4 @@ dist/
 *.exe
 *.zip
 *.bat
+config.local.yaml

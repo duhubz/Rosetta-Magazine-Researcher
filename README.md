@@ -189,7 +189,7 @@ The ZIP is downloaded from the URLs in `zip_sources` (defined in the catalog by 
 
 ---
 
-## ⚙️ Configuration (config.yaml)
+## ⚙️ Configuration (`config.yaml`)
 
 You can customize the app by placing a `config.yaml` file next to the application (or executable). If the file is missing, sensible defaults are used. All paths are relative to the app root.
 
@@ -218,6 +218,21 @@ heartbeat:
   shutdown_after_idle_seconds: 20   # Auto-exit when browser tab is closed
   check_interval_seconds: 5
 ```
+
+---
+
+## 🛠️ Developer Notes
+
+For local development, you can create a `config.local.yaml` next to `config.yaml`. The app loads `config.yaml` first, then overlays any values from `config.local.yaml`.
+
+For example:
+
+```yaml
+server:
+  dev_mode: true
+```
+
+When `server.dev_mode` is `true`, the app runs with Flask's development reloader. Python and template changes are picked up automatically, and static files are served without cache so a normal browser refresh is enough to see CSS/JS changes. Dev mode also skips the idle auto-shutdown behavior.
 
 ---
 
