@@ -12,27 +12,44 @@ else:
 _config: dict | None = None
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge two config dictionaries."""
+    merged = dict(base)
+    for key, value in override.items():
+        base_value = merged.get(key)
+        if isinstance(base_value, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(base_value, value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def _load_raw() -> dict:
-    """Load config from YAML file. Falls back to defaults if file missing."""
+    """Load config from config.yaml plus optional config.local.yaml overrides."""
     try:
         import yaml
     except ImportError:
         return _default_config()
 
-    config_path = ROOT_DIR / "config.yaml"
-    if config_path.exists():
+    config = _default_config()
+    for filename in ("config.yaml", "config.local.yaml"):
+        config_path = ROOT_DIR / filename
+        if not config_path.exists():
+            continue
         try:
             with open(config_path, encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
+                loaded = yaml.safe_load(f) or {}
+            if isinstance(loaded, dict):
+                config = _deep_merge(config, loaded)
         except Exception:
-            pass
-    return _default_config()
+            continue
+    return config
 
 
 def _default_config() -> dict:
     """Default configuration when no config file exists."""
     return {
-        "server": {"port": 18028},
+        "server": {"port": 18028, "dev_mode": False},
         "paths": {
             "data_dir": "Magazines",
             "bookmarks_file": "bookmarks.json",
@@ -101,6 +118,10 @@ def catalog_urls() -> list[str]:
 
 def server_port() -> int:
     return int(get_config().get("server", {}).get("port", 18028))
+
+
+def server_dev_mode() -> bool:
+    return bool(get_config().get("server", {}).get("dev_mode", False))
 
 
 def download_timeout() -> int:

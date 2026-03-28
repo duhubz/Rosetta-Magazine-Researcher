@@ -4,9 +4,11 @@ Magazines
 __pycache__/
 *.pyc
 venv/
+.venv/
 build/
 dist/
 *.spec
 *.exe
 *.zip
 *.bat
+config.local.yaml

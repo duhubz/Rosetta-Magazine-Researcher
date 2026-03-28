@@ -3,6 +3,7 @@
 
 server:
   port: 18028  # 'Fl' in hex for Flatso
+  dev_mode: false  # Enables Flask auto-reload and disables static/template caching
 
 paths:
   data_dir: Magazines

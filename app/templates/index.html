@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>Rosetta Magazine Researcher</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/toastui/toastui-editor.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/toastui/toastui-editor-dark.css') }}">
+    <script src="{{ url_for('static', filename='vendor/marked/marked.umd.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/toastui/toastui-editor.js') }}"></script>
     <style>
         :root { 
             --accent: #8ab4f8; --bg: #18191a; --panel: #242526; --text: #e4e6eb; 
@@ -140,10 +143,69 @@
         .content-box.markdown-mode table { width: 100%; border-collapse: collapse; margin: 15px 0; border: 1px solid var(--border); }
         .content-box.markdown-mode th, .content-box.markdown-mode td { border: 1px solid var(--border); padding: 10px; }
         .content-box.markdown-mode th { background: rgba(138, 180, 248, 0.1); color: var(--accent); }
+        .editor-modal-content .toastui-editor-md-preview,
+        .editor-modal-content .toastui-editor-contents,
+        .editor-modal-content .ProseMirror {
+            white-space: normal;
+            word-wrap: break-word;
+            font-family: "MS Mincho", serif;
+            color: var(--text);
+        }
+        .editor-modal-content .toastui-editor-md-preview,
+        .editor-modal-content .toastui-editor-ww-container {
+            background: var(--box);
+        }
+        .editor-modal-content .toastui-editor-md-preview,
+        .editor-modal-content .toastui-editor-ww-container .toastui-editor-contents {
+            padding: 18px;
+            box-sizing: border-box;
+        }
+        .editor-modal-content .toastui-editor-md-preview table,
+        .editor-modal-content .toastui-editor-contents table,
+        .editor-modal-content .ProseMirror table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            border: 1px solid var(--border);
+        }
+        .editor-modal-content .toastui-editor-md-preview th,
+        .editor-modal-content .toastui-editor-md-preview td,
+        .editor-modal-content .toastui-editor-contents th,
+        .editor-modal-content .toastui-editor-contents td,
+        .editor-modal-content .ProseMirror th,
+        .editor-modal-content .ProseMirror td {
+            border: 1px solid var(--border);
+            padding: 10px;
+        }
+        .editor-modal-content .toastui-editor-md-preview th,
+        .editor-modal-content .toastui-editor-contents th,
+        .editor-modal-content .ProseMirror th {
+            background: rgba(138, 180, 248, 0.1);
+            color: var(--accent);
+        }
 
         #synopsis-box { border-left: 3px solid var(--accent); background: rgba(138, 180, 248, 0.05); font-style: italic; }
         .section-label { font-size: 10px; font-weight: bold; color: var(--accent); text-transform: uppercase; margin-bottom: 5px; display: block; }
-        
+        .section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
+        .section-title-row .section-label { margin-bottom: 0; }
+        .section-actions { display: flex; align-items: center; gap: 8px; }
+        .section-action-btn {
+            display: none;
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid rgba(138, 180, 248, 0.45);
+            border-radius: 999px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .section-action-btn:hover { background: rgba(138, 180, 248, 0.12); }
+        .section-action-btn.meta-action { color: #fde68a; border-color: rgba(253, 230, 138, 0.5); }
+        .section-action-btn.meta-action:hover { background: rgba(253, 230, 138, 0.12); }
+        body.editing-active .section-action-btn { display: inline-flex; align-items: center; }
+
         .sidebar-tabs { display: flex; background: #111; }
         .tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-size: 11px; font-weight: bold; opacity: 0.5; color: white; }
         .tab.active { opacity: 1; border-bottom: 2px solid var(--accent); background: #222; }
@@ -190,9 +252,12 @@
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); 
             z-index: 5000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px);
+            padding: 16px;
+            box-sizing: border-box;
+            overflow-y: auto;
         }
         .modal-content {
-            background: var(--panel); width: 650px; max-width: 90%; border-radius: 12px; display: flex; 
+            background: var(--panel); width: 650px; max-width: min(90%, calc(100vw - 32px)); border-radius: 12px; display: flex; 
             overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.8); border: 1px solid var(--border);
         }
         .modal-left { width: 220px; background: #111; flex-shrink: 0; }
@@ -215,6 +280,285 @@
         .meta-line { font-size: 13px; color: #9aa0a6; margin-bottom: 15px; line-height: 1.5; }
         .scanner-link { color: var(--accent); text-decoration: none; font-weight: bold; }
         .scanner-link:hover { text-decoration: underline; }
+        .meta-edit-card {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            background: rgba(253, 230, 138, 0.08);
+            border: 1px solid rgba(253, 230, 138, 0.28);
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+        .meta-edit-copy { min-width: 0; width: 100%; }
+        .meta-edit-title { font-size: 13px; font-weight: 700; color: #fde68a; margin-bottom: 4px; }
+        .meta-edit-summary { color: #d1d5db; font-size: 12px; line-height: 1.5; }
+        .meta-preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 12px;
+        }
+        .meta-preview-table th,
+        .meta-preview-table td {
+            border-top: 1px solid rgba(253, 230, 138, 0.22);
+            padding: 8px 0;
+            vertical-align: top;
+        }
+        .meta-preview-table th {
+            width: 180px;
+            text-align: left;
+            color: #fde68a;
+            font-weight: 700;
+            padding-right: 14px;
+        }
+        .meta-preview-table td {
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .meta-preview-empty {
+            margin-top: 12px;
+            color: #9aa0a6;
+            font-size: 12px;
+        }
+        .filter-input-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 140px;
+        }
+        .filter-input-wrap input {
+            width: 100%;
+            box-sizing: border-box;
+            padding-right: 34px;
+        }
+        .filter-clear-btn {
+            position: absolute;
+            top: 50%;
+            right: 8px;
+            transform: translateY(-50%);
+            border: none;
+            background: transparent;
+            color: #9aa0a6;
+            font-size: 16px;
+            line-height: 1;
+            padding: 2px 4px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: none;
+        }
+        .filter-clear-btn:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.08);
+        }
+        .editor-modal-content {
+            width: min(1280px, 80vw);
+            max-width: calc(100vw - 32px);
+            height: min(80vh, calc(100vh - 32px));
+            max-height: calc(100vh - 32px);
+            min-height: min(620px, calc(100vh - 32px));
+            flex-direction: column;
+        }
+        .metadata-modal-content {
+            width: min(980px, 96vw);
+            max-width: min(980px, 96vw);
+            height: min(940px, calc(100vh - 32px));
+            max-height: calc(100vh - 32px);
+            min-height: min(700px, calc(100vh - 32px));
+        }
+        .metadata-modal-content .editor-modal-body {
+            overflow-y: auto;
+        }
+        .bookmark-modal-content {
+            width: min(520px, calc(100vw - 32px));
+            max-width: calc(100vw - 32px);
+            flex-direction: column;
+        }
+        .bookmark-modal-body {
+            padding: 20px 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .bookmark-modal-copy {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #d1d5db;
+        }
+        .bookmark-target {
+            font-size: 12px;
+            color: #9aa0a6;
+        }
+        .confirm-modal-content {
+            width: min(500px, calc(100vw - 32px));
+            max-width: calc(100vw - 32px);
+            flex-direction: column;
+        }
+        .confirm-modal-body {
+            padding: 20px 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .confirm-modal-message {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #d1d5db;
+            white-space: pre-wrap;
+        }
+        .editor-modal-header,
+        .editor-modal-footer {
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .editor-modal-header {
+            background: #111;
+            border-bottom: 1px solid var(--border);
+            padding-right: 56px;
+        }
+        .editor-modal-header-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            width: 100%;
+            min-width: 0;
+        }
+        .editor-mode-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 4px;
+            flex-shrink: 0;
+        }
+        .editor-mode-btn {
+            border: none;
+            background: transparent;
+            color: #cbd5e1;
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+        }
+        .editor-mode-btn:hover { background: rgba(138, 180, 248, 0.12); }
+        .editor-mode-btn.active {
+            background: var(--accent);
+            color: #111;
+        }
+        .editor-modal-subtitle { font-size: 13px; color: #9aa0a6; }
+        .editor-modal-body {
+            padding: 18px 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+            flex: 1;
+            overflow: hidden;
+        }
+        #editor-modal-host {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .editor-modal-footer {
+            border-top: 1px solid var(--border);
+            justify-content: flex-end;
+            flex-shrink: 0;
+        }
+        .editor-hint { font-size: 12px; color: #9aa0a6; }
+        .modal-btn {
+            border: none;
+            border-radius: 999px;
+            padding: 9px 16px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .modal-btn.secondary { background: #3a3b3c; color: #fff; }
+        .modal-btn.primary { background: var(--accent); color: #111; }
+        .modal-btn.danger { background: #dc3545; color: #fff; }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px 16px;
+        }
+        .metadata-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .metadata-field.full-width { grid-column: 1 / -1; }
+        .metadata-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .metadata-field input,
+        .metadata-field textarea {
+            width: 100%;
+            background: #0f1113;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            box-sizing: border-box;
+            font: inherit;
+        }
+        body.light-mode .metadata-field input,
+        body.light-mode .metadata-field textarea { background: #fff; }
+        .metadata-field textarea { min-height: 108px; resize: vertical; }
+        #meta-extra-lines { min-height: 170px; }
+        .editor-modal-content .toastui-editor-defaultUI {
+            border-color: var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            flex: 1;
+            min-height: 0;
+        }
+        .editor-modal-content .toastui-editor-main,
+        .editor-modal-content .toastui-editor-md-container,
+        .editor-modal-content .toastui-editor-ww-container {
+            min-height: 0;
+        }
+        .editor-modal-content .toastui-editor-popup { color: #222; }
+        .editor-modal-content .toastui-editor-contents,
+        .editor-modal-content .toastui-editor-md-preview,
+        .editor-modal-content .toastui-editor-md-container .CodeMirror,
+        .editor-modal-content .ProseMirror {
+            font-size: 17px;
+            line-height: 1.7;
+        }
+        body.light-mode .editor-modal-content .toastui-editor-defaultUI:not(.toastui-editor-dark) {
+            background: #fff;
+        }
+
+        @media (max-width: 780px) {
+            .metadata-grid { grid-template-columns: 1fr; }
+            .meta-edit-card { flex-direction: column; align-items: flex-start; }
+            .meta-preview-table th,
+            .meta-preview-table td { display: block; width: auto; }
+            .meta-preview-table th { padding-bottom: 2px; }
+            .meta-preview-table td { padding-top: 0; padding-bottom: 10px; }
+            .editor-modal-header-main { flex-direction: column; align-items: flex-start; }
+            .editor-mode-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+            .editor-modal-header,
+            .editor-modal-footer,
+            .editor-modal-body { padding-left: 16px; padding-right: 16px; }
+        }
     </style>
 </head>
 <body class="dark-mode">
@@ -229,24 +573,51 @@
             <div id="meta-display" class="meta-line"></div>
             
             <div id="sec-jp-container">
-                <span class="section-label">Transcription</span>
+                <div class="section-title-row">
+                    <span class="section-label">Transcription</span>
+                    <div class="section-actions">
+                        <button class="section-action-btn" type="button" onclick="openContentEditor('jp')">Open Editor</button>
+                    </div>
+                </div>
                 <div id="jp-box" class="content-box"></div>
                 <textarea id="jp-edit" class="edit-area" rows="12"></textarea>
             </div>
             <div id="sec-en-container">
-                <span class="section-label">Translation</span>
+                <div class="section-title-row">
+                    <span class="section-label">Translation</span>
+                    <div class="section-actions">
+                        <button class="section-action-btn" type="button" onclick="openContentEditor('en')">Open Editor</button>
+                    </div>
+                </div>
                 <div id="en-box" class="content-box"></div>
                 <textarea id="en-edit" class="edit-area" rows="12"></textarea>
             </div>
             <div id="sec-sum-container">
-                <span class="section-label">📝 Page Summary</span>
+                <div class="section-title-row">
+                    <span class="section-label">📝 Page Summary</span>
+                    <div class="section-actions">
+                        <button class="section-action-btn" type="button" onclick="openContentEditor('sum')">Open Editor</button>
+                    </div>
+                </div>
                 <div id="synopsis-box" class="content-box"></div>
                 <textarea id="sum-edit" class="edit-area" rows="6"></textarea>
             </div>
             
             <div id="meta-edit-container" style="display:none; margin-top:20px;">
-                <span class="section-label" style="color:#fde68a;">⚙️ Magazine Metadata (Applies to all pages)</span>
-                <textarea id="meta-edit" class="edit-area" rows="6" style="border-color:#fde68a; display:block;"></textarea>
+                <div class="section-title-row">
+                    <span class="section-label" style="color:#fde68a;">⚙️ Magazine Metadata (Applies to all pages)</span>
+                    <div class="section-actions">
+                        <button class="section-action-btn meta-action" type="button" onclick="openMetadataEditor()">Edit Metadata</button>
+                    </div>
+                </div>
+                <div class="meta-edit-card">
+                    <div class="meta-edit-copy">
+                        <div class="meta-edit-title">Current metadata</div>
+                        <div id="meta-edit-summary" class="meta-edit-summary">No metadata saved yet.</div>
+                        <div id="meta-edit-preview" class="meta-preview-empty">No metadata saved yet.</div>
+                    </div>
+                </div>
+                <textarea id="meta-edit" rows="6" style="display:none;"></textarea>
             </div>
         </div>
         <div id="sidebar" class="sidebar collapsed">
@@ -309,7 +680,10 @@
                 </div>
             </div>
             <div class="lib-filter-bar" style="gap:10px; font-size:13px;">
-                <input type="text" id="lib-filter-mag" list="lib-mag-datalist" style="flex:1; min-width:140px; box-sizing:border-box;" placeholder="Magazine Name" onkeyup="filterLibrary()">
+                <div class="filter-input-wrap">
+                    <input type="text" id="lib-filter-mag" list="lib-mag-datalist" placeholder="Magazine Name" oninput="syncLibraryMagazineFilterUi(); filterLibrary()">
+                    <button id="lib-filter-mag-clear" class="filter-clear-btn" type="button" aria-label="Clear magazine filter" onclick="clearLibraryMagazineFilter()">×</button>
+                </div>
                 <datalist id="lib-mag-datalist"></datalist>
 
                 <input type="text" id="lib-filter-pub" list="lib-pub-datalist" style="width:140px; box-sizing:border-box;" placeholder="Publisher" onkeyup="filterLibrary()">
@@ -366,6 +740,150 @@
                 <span style="cursor: pointer; color: #888; font-size: 24px; font-weight: bold;" onclick="closeHelp(event)">&times;</span>
             </div>
             <div id="help-content" class="content-box markdown-mode" style="margin: 0; border: none; border-radius: 0; overflow-y: auto; flex: 1; padding: 30px; background: var(--panel);">
+            </div>
+        </div>
+    </div>
+
+    <div id="editor-modal-overlay" class="modal-overlay" onclick="closeContentEditor(event)">
+        <div class="modal-content editor-modal-content" onclick="event.stopPropagation()">
+            <div class="editor-modal-header">
+                <div class="editor-modal-header-main">
+                    <div>
+                        <h2 id="editor-modal-title" style="margin:0; color:var(--accent); font-size:22px;">Editor</h2>
+                        <div id="editor-modal-subtitle" class="editor-modal-subtitle">Visual editing with markdown storage.</div>
+                    </div>
+                    <div class="editor-mode-controls">
+                        <button id="editor-mode-rich" class="editor-mode-btn active" type="button" onclick="setContentEditorMode('wysiwyg')">Rich</button>
+                        <button id="editor-mode-markdown" class="editor-mode-btn" type="button" onclick="setContentEditorMode('markdown')">Markdown</button>
+                        <button id="editor-mode-split" class="editor-mode-btn" type="button" onclick="setContentEditorMode('split')">Split</button>
+                    </div>
+                </div>
+                <span class="close-modal" onclick="closeContentEditor(event)">&times;</span>
+            </div>
+            <div class="editor-modal-body">
+                <div class="editor-hint">Changes apply back to the inline field and save with the existing page-level Save button.</div>
+                <div id="editor-modal-host"></div>
+            </div>
+            <div class="editor-modal-footer">
+                <button class="modal-btn secondary" type="button" onclick="closeContentEditor()">Cancel</button>
+                <button class="modal-btn primary" type="button" onclick="applyContentEditor()">Apply Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="metadata-modal-overlay" class="modal-overlay" onclick="closeMetadataEditor(event)">
+        <div class="modal-content editor-modal-content metadata-modal-content" onclick="event.stopPropagation()">
+            <div class="editor-modal-header">
+                <div>
+                    <h2 style="margin:0; color:#fde68a; font-size:22px;">Metadata Editor</h2>
+                    <div class="editor-modal-subtitle">Writes back to the existing <code>metadata.txt</code> key/value format.</div>
+                </div>
+                <span class="close-modal" onclick="closeMetadataEditor(event)">&times;</span>
+            </div>
+            <div class="editor-modal-body">
+                <div class="metadata-grid">
+                    <label class="metadata-field">
+                        <span class="metadata-label">Magazine Name</span>
+                        <input id="meta-field-name" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Publisher</span>
+                        <input id="meta-field-publisher" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Date</span>
+                        <input id="meta-field-date" type="text" placeholder="1992-10-01">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Issue Name</span>
+                        <input id="meta-field-issue_name" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Region</span>
+                        <input id="meta-field-region" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Translation</span>
+                        <input id="meta-field-translation" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Version</span>
+                        <input id="meta-field-version" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Tags</span>
+                        <input id="meta-field-tags" type="text" placeholder="action, retro">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Scanner</span>
+                        <input id="meta-field-scanner" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Scanner URL</span>
+                        <input id="meta-field-scanner_url" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Editor</span>
+                        <input id="meta-field-editor" type="text">
+                    </label>
+                    <label class="metadata-field">
+                        <span class="metadata-label">Editor URL</span>
+                        <input id="meta-field-editor_url" type="text">
+                    </label>
+                    <label class="metadata-field full-width">
+                        <span class="metadata-label">Notes</span>
+                        <textarea id="meta-field-notes"></textarea>
+                    </label>
+                    <label class="metadata-field full-width">
+                        <span class="metadata-label">Additional Raw Lines</span>
+                        <textarea id="meta-extra-lines" placeholder="Preserved verbatim for unknown or custom metadata lines."></textarea>
+                    </label>
+                </div>
+            </div>
+            <div class="editor-modal-footer">
+                <button class="modal-btn secondary" type="button" onclick="closeMetadataEditor()">Cancel</button>
+                <button class="modal-btn primary" type="button" onclick="applyMetadataEditor()">Apply Metadata</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bookmark-modal-overlay" class="modal-overlay" onclick="closeBookmarkModal(event)">
+        <div class="modal-content bookmark-modal-content" onclick="event.stopPropagation()">
+            <div class="editor-modal-header">
+                <div>
+                    <h2 style="margin:0; color:var(--accent); font-size:22px;">Save Bookmark</h2>
+                    <div id="bookmark-modal-target" class="bookmark-target"></div>
+                </div>
+                <span class="close-modal" onclick="closeBookmarkModal(event)">&times;</span>
+            </div>
+            <div class="bookmark-modal-body">
+                <div class="bookmark-modal-copy">Add tags to make this page easier to find later in the Bookmarks tab.</div>
+                <label class="metadata-field">
+                    <span class="metadata-label">Tags</span>
+                    <input id="bookmark-tags-input" type="text" placeholder="boss fight, ad, strategy guide" onkeydown="handleBookmarkModalKeydown(event)">
+                </label>
+            </div>
+            <div class="editor-modal-footer">
+                <button class="modal-btn secondary" type="button" onclick="closeBookmarkModal()">Cancel</button>
+                <button class="modal-btn primary" type="button" onclick="applyBookmarkModal()">Save Bookmark</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal-overlay" class="modal-overlay" onclick="closeConfirmModal(event)">
+        <div class="modal-content confirm-modal-content" onclick="event.stopPropagation()">
+            <div class="editor-modal-header">
+                <div>
+                    <h2 id="confirm-modal-title" style="margin:0; color:var(--accent); font-size:22px;">Confirm Action</h2>
+                </div>
+                <span class="close-modal" onclick="closeConfirmModal(event)">&times;</span>
+            </div>
+            <div class="confirm-modal-body">
+                <div id="confirm-modal-message" class="confirm-modal-message"></div>
+            </div>
+            <div class="editor-modal-footer">
+                <button class="modal-btn secondary" type="button" onclick="closeConfirmModal()">Cancel</button>
+                <button id="confirm-modal-confirm" class="modal-btn primary" type="button" onclick="applyConfirmModal()">Confirm</button>
             </div>
         </div>
     </div>
@@ -435,7 +953,7 @@ This app features a fully interactive spatial mapping engine. The English transl
 - **Formatting:** Click the **MD** button to toggle between formatted markdown and raw text. (Recommended!)
 - **Font Size & Theme:** Use the slider at the bottom to adjust text size, and the ☀️ button to switch between Dark and Light mode.
 - **Bookmarks:** Click the ⭐ button to save your current page. You can add custom tags to your bookmarks to easily filter them in the Bookmarks sidebar tab!
-- **Editing:** Click **✏️ Edit** to fix typos in the translation or update the magazine's tags/metadata. Click **Save** when done!
+- **Editing:** Click **✏️ Edit** for quick inline fixes, or use the per-section **Open Editor** buttons for the larger visual editor. Metadata now opens in a structured form. Click **Save** when done!
 
 ---
 
@@ -618,6 +1136,48 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
         let itemsWithUpdates =[];
         let completedDownloads = new Set();
         let currentModalItemId = null;
+        let contentEditor = null;
+        let activeContentEditorKey = null;
+        let contentEditorMode = 'wysiwyg';
+        let pendingConfirmAction = null;
+
+        const CONTENT_EDITOR_FIELDS = {
+            jp: {
+                textareaId: 'jp-edit',
+                title: 'Japanese Transcription',
+                subtitle: 'Visual editing for page transcription. Markdown is saved under the hood.',
+            },
+            en: {
+                textareaId: 'en-edit',
+                title: 'English Translation',
+                subtitle: 'Visual editing for page translation. Markdown is saved under the hood.',
+            },
+            sum: {
+                textareaId: 'sum-edit',
+                title: 'Page Summary',
+                subtitle: 'Visual editing for page summary text. Markdown is saved under the hood.',
+            },
+        };
+
+        const METADATA_FIELDS = [
+            { key: 'name', label: 'Magazine Name' },
+            { key: 'publisher', label: 'Publisher' },
+            { key: 'date', label: 'Date' },
+            { key: 'issue_name', label: 'Issue Name' },
+            { key: 'region', label: 'Region' },
+            { key: 'translation', label: 'Translation' },
+            { key: 'version', label: 'Version' },
+            { key: 'tags', label: 'Tags' },
+            { key: 'scanner', label: 'Scanner' },
+            { key: 'scanner_url', label: 'Scanner URL' },
+            { key: 'editor', label: 'Editor' },
+            { key: 'editor_url', label: 'Editor URL' },
+            { key: 'notes', label: 'Notes' },
+        ];
+
+        const METADATA_KEY_MAP = Object.fromEntries(
+            METADATA_FIELDS.map(field => [field.label.toLowerCase(), field.key])
+        );
 
         // HELPER: Convert language codes to emojis
         function getFlagEmoji(langCode) {
@@ -627,6 +1187,336 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
                 'DE': '🇩🇪', 'ES': '🇪🇸', 'IT': '🇮🇹', 'KR': '🇰🇷', 'CN': '🇨🇳'
             };
             return flags[langCode.toUpperCase()] || langCode.toUpperCase();
+        }
+
+        function createEmptyMetadataFields() {
+            return Object.fromEntries(METADATA_FIELDS.map(field => [field.key, ""]));
+        }
+
+        function parseMetadataText(rawText = "") {
+            const fields = createEmptyMetadataFields();
+            const extraLines = [];
+
+            rawText.replace(/\r\n/g, '\n').split('\n').forEach(line => {
+                if (!line) {
+                    extraLines.push(line);
+                    return;
+                }
+                const separatorIndex = line.indexOf(':');
+                if (separatorIndex === -1) {
+                    extraLines.push(line);
+                    return;
+                }
+
+                const rawKey = line.slice(0, separatorIndex).trim().toLowerCase();
+                const mappedKey = METADATA_KEY_MAP[rawKey];
+                if (!mappedKey) {
+                    extraLines.push(line);
+                    return;
+                }
+
+                fields[mappedKey] = line.slice(separatorIndex + 1).trim();
+            });
+
+            return { fields, extraLines: extraLines.join('\n').trimEnd() };
+        }
+
+        function serializeMetadataText(fields, extraLines = "") {
+            const lines = [];
+            METADATA_FIELDS.forEach(({ key, label }) => {
+                const value = (fields[key] || "").trim();
+                if (value) lines.push(`${label}: ${value}`);
+            });
+
+            const rawExtras = extraLines.replace(/\r\n/g, '\n').trimEnd();
+            if (rawExtras) {
+                if (lines.length) lines.push('');
+                lines.push(rawExtras);
+            }
+
+            return lines.join('\n');
+        }
+
+        function escapeHtml(value = "") {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function updateMetadataSummary() {
+            const summaryEl = document.getElementById('meta-edit-summary');
+            const previewEl = document.getElementById('meta-edit-preview');
+            const rawText = document.getElementById('meta-edit').value || "";
+            const { fields, extraLines } = parseMetadataText(rawText);
+            const populatedCount = METADATA_FIELDS.filter(({ key }) => fields[key]).length;
+            const extraCount = extraLines
+                ? extraLines.split('\n').filter(line => line.trim()).length
+                : 0;
+
+            const headline = [fields.name, fields.date, fields.version ? `v${fields.version}` : ""]
+                .filter(Boolean)
+                .join(' • ');
+
+            if (!headline && populatedCount === 0 && extraCount === 0) {
+                summaryEl.innerText = "No metadata saved yet.";
+                previewEl.className = 'meta-preview-empty';
+                previewEl.innerText = "No metadata saved yet.";
+                return;
+            }
+
+            const stats = [
+                `${populatedCount} field${populatedCount === 1 ? '' : 's'} set`,
+                extraCount ? `${extraCount} extra line${extraCount === 1 ? '' : 's'} preserved` : '',
+            ].filter(Boolean).join(' • ');
+
+            summaryEl.innerText = [headline, stats].filter(Boolean).join(' — ');
+
+            const rows = METADATA_FIELDS
+                .filter(({ key }) => fields[key])
+                .map(({ label, key }) => `
+                    <tr>
+                        <th scope="row">${escapeHtml(label)}</th>
+                        <td>${escapeHtml(fields[key])}</td>
+                    </tr>
+                `);
+
+            if (extraCount) {
+                rows.push(`
+                    <tr>
+                        <th scope="row">Additional Raw Lines</th>
+                        <td>${escapeHtml(extraLines)}</td>
+                    </tr>
+                `);
+            }
+
+            previewEl.className = '';
+            previewEl.innerHTML = `<table class="meta-preview-table"><tbody>${rows.join('')}</tbody></table>`;
+        }
+
+        function ensureContentEditor() {
+            if (contentEditor) return;
+
+            contentEditor = new toastui.Editor({
+                el: document.getElementById('editor-modal-host'),
+                height: '400px',
+                initialEditType: 'wysiwyg',
+                hideModeSwitch: true,
+                usageStatistics: false,
+                customHTMLRenderer: {
+                    softbreak() {
+                        return {
+                            type: 'text',
+                            content: ' ',
+                        };
+                    },
+                },
+                previewStyle: 'vertical',
+                toolbarItems: [
+                    ['heading', 'bold', 'italic', 'strike'],
+                    ['hr', 'quote'],
+                    ['ul', 'ol', 'task'],
+                    ['table', 'link'],
+                ],
+            });
+
+            if (contentEditor.convertor && contentEditor.convertor.toWwConvertors) {
+                contentEditor.convertor.toWwConvertors.softbreak = function(state) {
+                    state.addText(' ');
+                };
+            }
+
+            syncContentEditorTheme();
+        }
+
+        function syncContentEditorHeight() {
+            if (!contentEditor) return;
+
+            const host = document.getElementById('editor-modal-host');
+            if (!host) return;
+
+            const nextHeight = Math.max(260, Math.floor(host.clientHeight || 0));
+            if (typeof contentEditor.setHeight === 'function') {
+                contentEditor.setHeight(`${nextHeight}px`);
+            }
+        }
+
+        function updateContentEditorModeButtons() {
+            document.getElementById('editor-mode-rich').classList.toggle('active', contentEditorMode === 'wysiwyg');
+            document.getElementById('editor-mode-markdown').classList.toggle('active', contentEditorMode === 'markdown');
+            document.getElementById('editor-mode-split').classList.toggle('active', contentEditorMode === 'split');
+        }
+
+        function getContentEditorModeSelection(targetMode) {
+            if (!contentEditor || typeof contentEditor.getSelection !== 'function') return null;
+
+            const selection = contentEditor.getSelection();
+            if (!Array.isArray(selection) || selection.length < 2) return null;
+
+            const start = selection[0];
+            const end = selection[1];
+            const currentMode = typeof contentEditor.isWysiwygMode === 'function' && contentEditor.isWysiwygMode()
+                ? 'wysiwyg'
+                : 'markdown';
+
+            if (currentMode === targetMode || typeof contentEditor.convertPosToMatchEditorMode !== 'function') {
+                return [start, end];
+            }
+
+            return contentEditor.convertPosToMatchEditorMode(start, end, targetMode);
+        }
+
+        function restoreContentEditorSelection(selection, shouldFocus = true) {
+            if (!contentEditor || !selection || typeof contentEditor.setSelection !== 'function') {
+                if (shouldFocus && contentEditor && typeof contentEditor.focus === 'function') {
+                    contentEditor.focus();
+                }
+                return;
+            }
+
+            const [start, end] = selection;
+            contentEditor.setSelection(start, end);
+            if (shouldFocus && typeof contentEditor.focus === 'function') {
+                contentEditor.focus();
+            }
+        }
+
+        function deferContentEditorSelectionRestore(selection, shouldFocus = true) {
+            const restore = () => restoreContentEditorSelection(selection, shouldFocus);
+
+            if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(restore);
+                });
+            } else {
+                setTimeout(restore, 16);
+            }
+        }
+
+        function setContentEditorMode(mode, options = {}) {
+            const { preserveSelection = true, focusEditor = true } = options;
+            contentEditorMode = mode;
+            updateContentEditorModeButtons();
+
+            if (!contentEditor) return;
+
+            const targetEditorMode = mode === 'wysiwyg' ? 'wysiwyg' : 'markdown';
+            const selection = preserveSelection ? getContentEditorModeSelection(targetEditorMode) : null;
+
+            if (mode === 'wysiwyg') {
+                contentEditor.changePreviewStyle('tab');
+                contentEditor.changeMode('wysiwyg', true);
+            } else if (mode === 'markdown') {
+                contentEditor.changePreviewStyle('tab');
+                contentEditor.changeMode('markdown', true);
+            } else if (mode === 'split') {
+                contentEditor.changePreviewStyle('vertical');
+                contentEditor.changeMode('markdown', true);
+            }
+
+            setTimeout(() => {
+                syncContentEditorHeight();
+                deferContentEditorSelectionRestore(selection, focusEditor);
+            }, 0);
+        }
+
+        function syncContentEditorTheme() {
+            const editorRoot = document.querySelector('#editor-modal-host .toastui-editor-defaultUI');
+            if (!editorRoot) return;
+            editorRoot.classList.toggle('toastui-editor-dark', !document.body.classList.contains('light-mode'));
+        }
+
+        function resetContentEditorToStart() {
+            if (!contentEditor) return;
+
+            if (typeof contentEditor.setScrollTop === 'function') {
+                contentEditor.setScrollTop(0);
+            }
+
+            const previewPane = document.querySelector('#editor-modal-host .toastui-editor-md-preview');
+            if (previewPane) previewPane.scrollTop = 0;
+
+            if (typeof contentEditor.moveCursorToStart === 'function') {
+                contentEditor.moveCursorToStart(true);
+            } else if (typeof contentEditor.focus === 'function') {
+                contentEditor.focus();
+            }
+        }
+
+        function openContentEditor(fieldKey) {
+            if (!isEditing || !CONTENT_EDITOR_FIELDS[fieldKey]) return;
+
+            activeContentEditorKey = fieldKey;
+            document.getElementById('editor-modal-overlay').style.display = 'flex';
+            ensureContentEditor();
+
+            const field = CONTENT_EDITOR_FIELDS[fieldKey];
+            document.getElementById('editor-modal-title').innerText = field.title;
+            document.getElementById('editor-modal-subtitle').innerText = field.subtitle;
+            contentEditor.setMarkdown(document.getElementById(field.textareaId).value || "", false);
+            setContentEditorMode(contentEditorMode, { preserveSelection: false, focusEditor: false });
+            syncContentEditorHeight();
+            syncContentEditorTheme();
+            setTimeout(() => {
+                setContentEditorMode(contentEditorMode, { preserveSelection: false, focusEditor: false });
+                syncContentEditorHeight();
+                resetContentEditorToStart();
+            }, 0);
+        }
+
+        function closeContentEditor(e) {
+            if (
+                e &&
+                e.target.id !== 'editor-modal-overlay' &&
+                !e.target.classList.contains('close-modal')
+            ) return;
+
+            document.getElementById('editor-modal-overlay').style.display = 'none';
+            activeContentEditorKey = null;
+        }
+
+        function applyContentEditor() {
+            if (!contentEditor || !activeContentEditorKey) return;
+            const field = CONTENT_EDITOR_FIELDS[activeContentEditorKey];
+            document.getElementById(field.textareaId).value = contentEditor.getMarkdown().trimEnd();
+            closeContentEditor();
+        }
+
+        function openMetadataEditor() {
+            if (!isEditing) return;
+
+            const { fields, extraLines } = parseMetadataText(document.getElementById('meta-edit').value || "");
+            METADATA_FIELDS.forEach(({ key }) => {
+                document.getElementById(`meta-field-${key}`).value = fields[key] || "";
+            });
+            document.getElementById('meta-extra-lines').value = extraLines;
+            document.getElementById('metadata-modal-overlay').style.display = 'flex';
+        }
+
+        function closeMetadataEditor(e) {
+            if (
+                e &&
+                e.target.id !== 'metadata-modal-overlay' &&
+                !e.target.classList.contains('close-modal')
+            ) return;
+
+            document.getElementById('metadata-modal-overlay').style.display = 'none';
+        }
+
+        function applyMetadataEditor() {
+            const fields = createEmptyMetadataFields();
+            METADATA_FIELDS.forEach(({ key }) => {
+                fields[key] = document.getElementById(`meta-field-${key}`).value || "";
+            });
+
+            document.getElementById('meta-edit').value = serializeMetadataText(
+                fields,
+                document.getElementById('meta-extra-lines').value || ""
+            );
+            updateMetadataSummary();
+            closeMetadataEditor();
         }
 
         setInterval(() => { fetch('/api/ping').catch(() => {}); }, 5000);
@@ -675,7 +1565,10 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             document.getElementById('zoom-input').value = `${currentImgZoom}%`;
         }
 
-        window.addEventListener('resize', () => { adjustImgZoom(0); });
+        window.addEventListener('resize', () => {
+            adjustImgZoom(0);
+            syncContentEditorHeight();
+        });
 
         document.getElementById('left').addEventListener('wheel', (e) => {
             if (e.ctrlKey || e.metaKey) {
@@ -858,6 +1751,22 @@ let isMangaMode = false;
 
         function filterLibrary() { renderLibrary(); }
 
+        function syncLibraryMagazineFilterUi() {
+            const input = document.getElementById('lib-filter-mag');
+            const clearBtn = document.getElementById('lib-filter-mag-clear');
+            if (!input || !clearBtn) return;
+            clearBtn.style.display = input.value ? 'block' : 'none';
+        }
+
+        function clearLibraryMagazineFilter() {
+            const input = document.getElementById('lib-filter-mag');
+            if (!input) return;
+            input.value = '';
+            syncLibraryMagazineFilterUi();
+            filterLibrary();
+            input.focus();
+        }
+
 function renderLibrary() {
             const grid = document.getElementById('lib-grid');
             const magListContainer = document.getElementById('lib-mag-list');
@@ -870,6 +1779,7 @@ function renderLibrary() {
             const filterTrans = document.getElementById('lib-filter-trans').value.toLowerCase();
             const filterMedia = document.getElementById('lib-filter-media').value.toLowerCase();
             const filterTags = document.getElementById('lib-filter-tags').value.toLowerCase();
+            syncLibraryMagazineFilterUi();
             
             const dateStart = document.getElementById('lib-date-start').value;
             const dateEnd = document.getElementById('lib-date-end').value;
@@ -909,6 +1819,7 @@ function renderLibrary() {
                     pill.innerText = magName;
                     pill.onclick = () => {
                         document.getElementById('lib-filter-mag').value = magName;
+                        syncLibraryMagazineFilterUi();
                         filterLibrary(); // Instantly switch to grid view
                     };
                     magListContainer.appendChild(pill);
@@ -999,8 +1910,46 @@ function renderLibrary() {
             document.getElementById('lib-update-all-btn').style.display = itemsWithUpdates.length > 0 ? 'block' : 'none';
         }
 
+        function openConfirmModal({ title, message, confirmLabel = 'Confirm', tone = 'primary', onConfirm }) {
+            pendingConfirmAction = onConfirm || null;
+
+            document.getElementById('confirm-modal-title').innerText = title || 'Confirm Action';
+            document.getElementById('confirm-modal-message').innerText = message || '';
+
+            const confirmBtn = document.getElementById('confirm-modal-confirm');
+            confirmBtn.innerText = confirmLabel;
+            confirmBtn.className = `modal-btn ${tone === 'danger' ? 'danger' : 'primary'}`;
+
+            document.getElementById('confirm-modal-overlay').style.display = 'flex';
+            setTimeout(() => confirmBtn.focus(), 0);
+        }
+
+        function closeConfirmModal(e) {
+            if (
+                e &&
+                e.target.id !== 'confirm-modal-overlay' &&
+                !e.target.classList.contains('close-modal')
+            ) return;
+
+            document.getElementById('confirm-modal-overlay').style.display = 'none';
+            pendingConfirmAction = null;
+        }
+
+        async function applyConfirmModal() {
+            const action = pendingConfirmAction;
+            document.getElementById('confirm-modal-overlay').style.display = 'none';
+            pendingConfirmAction = null;
+            if (typeof action === 'function') {
+                await action();
+            }
+        }
+
         async function updateAllIssues() {
-            if(!confirm(`Update ${itemsWithUpdates.length} issues? Depending on size, this may take a while.`)) return;
+            openConfirmModal({
+                title: 'Update All Issues',
+                message: `Update ${itemsWithUpdates.length} issues? Depending on size, this may take a while.`,
+                confirmLabel: 'Start Updates',
+                onConfirm: async () => {
             document.getElementById('lib-update-all-btn').innerText = "Starting Updates...";
             document.getElementById('lib-update-all-btn').disabled = true;
             for (let id of itemsWithUpdates) {
@@ -1008,6 +1957,8 @@ function renderLibrary() {
                 await fetch(`/api/download`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id}) });
                 await new Promise(r => setTimeout(r, 500)); // Stagger slightly
             }
+                }
+            });
         }
 
         function openModal(id, isDownloaded) {
@@ -1097,7 +2048,12 @@ function renderLibrary() {
         }
 
         async function uninstallIssue(pdf_filename) {
-            if(!confirm("Are you sure you want to permanently delete this issue from your computer?")) return;
+            openConfirmModal({
+                title: 'Uninstall Issue',
+                message: 'Are you sure you want to permanently delete this issue from your computer?',
+                confirmLabel: 'Uninstall',
+                tone: 'danger',
+                onConfirm: async () => {
             document.getElementById('modal-action-area').innerHTML = `<div style="color:#ff4d4d; font-weight:bold; text-align:center;">🗑️ Uninstalling...</div>`;
             await fetch('/api/uninstall', {
                 method: 'POST',
@@ -1106,6 +2062,8 @@ function renderLibrary() {
             });
             closeModal();
             init(); // Refresh grid and dropdowns
+                }
+            });
         }
         
         async function startDownload(id, actionAreaElement) {
@@ -1223,6 +2181,10 @@ function renderLibrary() {
             renderContent();
             renderMetadata(currentRawData.metadata, page, mag);
             
+            closeContentEditor();
+            closeMetadataEditor();
+            closeBookmarkModal();
+            closeConfirmModal();
             if(isEditing) { isEditing = false; toggleEdit(); }
         }
 
@@ -1290,18 +2252,17 @@ function renderLibrary() {
             
             document.getElementById('edit-btn').classList.toggle('active', isEditing);
             document.getElementById('save-btn').style.display = isEditing ? 'inline-block' : 'none';
+            document.body.classList.toggle('editing-active', isEditing);
             
             if(isEditing) {
                 document.getElementById('jp-edit').value = currentRawData.jp;
                 document.getElementById('en-edit').value = currentRawData.en;
                 document.getElementById('sum-edit').value = currentRawData.sum;
-                
-                let rawMeta = currentRawData.raw_meta;
-                if (!rawMeta) {
-                    rawMeta = `Magazine Name: \nPublisher: \nDate: \nIssue Name: \nRegion: \nTranslation: \nVersion: \nTags: \nScanner: \nScanner URL: \nEditor: \nEditor URL: \nNotes: `;
-                }
-                document.getElementById('meta-edit').value = rawMeta;
+                document.getElementById('meta-edit').value = currentRawData.raw_meta || "";
+                updateMetadataSummary();
             } else { 
+                closeContentEditor();
+                closeMetadataEditor();
                 renderContent(); 
             }
             
@@ -1320,7 +2281,7 @@ function renderLibrary() {
             const btn = document.getElementById('save-btn');
             btn.innerText = "Saving...";
             const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-            if(res.ok) { btn.innerText = "💾 Save"; isEditing = false; toggleEdit(); update(); }
+            if(res.ok) { btn.innerText = "💾 Save"; closeContentEditor(); closeMetadataEditor(); isEditing = false; toggleEdit(); update(); }
         }
 
         async function fetchBookmarks() {
@@ -1345,7 +2306,60 @@ function renderLibrary() {
         }
 
         async function deleteBookmark(key, e) { e.stopPropagation(); await fetch(`/api/bookmarks?key=${encodeURIComponent(key)}`, { method: 'DELETE' }); fetchBookmarks(); }
-        async function toggleBookmark() { const tags = prompt("Enter tags:", ""); if (tags === null) return; await fetch('/api/bookmarks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mag: magSelect.value, page: pageInput.value, tags }) }); fetchBookmarks(); }
+
+        function getCurrentBookmarkKey() {
+            if (!magSelect.value || !pageInput.value) return "";
+            return `${magSelect.value}_${pageInput.value}`;
+        }
+
+        function openBookmarkModal() {
+            if (!magSelect.value) return;
+
+            const currentKey = getCurrentBookmarkKey();
+            const existing = bookmarksData[currentKey];
+            const prettyName = pathToLabel[magSelect.value] || magSelect.value.split('/').pop();
+
+            document.getElementById('bookmark-modal-target').innerText = `${prettyName} • Page ${pageInput.value}`;
+            document.getElementById('bookmark-tags-input').value = existing?.tags || "";
+            document.getElementById('bookmark-modal-overlay').style.display = 'flex';
+
+            setTimeout(() => {
+                const input = document.getElementById('bookmark-tags-input');
+                input.focus();
+                input.select();
+            }, 0);
+        }
+
+        function closeBookmarkModal(e) {
+            if (
+                e &&
+                e.target.id !== 'bookmark-modal-overlay' &&
+                !e.target.classList.contains('close-modal')
+            ) return;
+
+            document.getElementById('bookmark-modal-overlay').style.display = 'none';
+        }
+
+        function handleBookmarkModalKeydown(event) {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            applyBookmarkModal();
+        }
+
+        async function applyBookmarkModal() {
+            if (!magSelect.value) return;
+
+            const tags = document.getElementById('bookmark-tags-input').value;
+            await fetch('/api/bookmarks', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mag: magSelect.value, page: pageInput.value, tags })
+            });
+            closeBookmarkModal();
+            fetchBookmarks();
+        }
+
+        function toggleBookmark() { openBookmarkModal(); }
 
         function changePage(d) {
             let next = parseInt(pageInput.value) + d;
@@ -1455,7 +2469,10 @@ function renderLibrary() {
             document.getElementById('panel-bookmarks').style.display = tab === 'bookmarks' ? 'block' : 'none';
         }
 
-        function toggleTheme() { document.body.classList.toggle('light-mode'); }
+        function toggleTheme() {
+            document.body.classList.toggle('light-mode');
+            syncContentEditorTheme();
+        }
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
         function toggleSec(id, show) { document.getElementById(id).style.display = show ? 'block' : 'none'; }
         function updateFont(v) { document.documentElement.style.setProperty('--font-size', v + 'px'); }
@@ -1463,14 +2480,35 @@ function renderLibrary() {
         // KEYBOARD SHORTCUTS
         document.addEventListener('keydown', (e) => {
             // 1. Do nothing if the user is typing in a text box or search bar
-            const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-            if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+            const activeEl = document.activeElement;
+            const activeTag = activeEl ? activeEl.tagName.toLowerCase() : '';
+            if (
+                activeTag === 'input' ||
+                activeTag === 'textarea' ||
+                activeTag === 'select' ||
+                (activeEl && activeEl.isContentEditable) ||
+                (activeEl && activeEl.closest && activeEl.closest('.toastui-editor-defaultUI'))
+            ) return;
             
             // 2. Do nothing if a menu popup is open
             const lib = document.getElementById('library-overlay');
             const mod = document.getElementById('modal-overlay');
             const help = document.getElementById('help-overlay');
-            if ((lib && lib.style.display === 'flex') || (mod && mod.style.display === 'flex') || (help && help.style.display === 'flex')) return;
+            const editorModal = document.getElementById('editor-modal-overlay');
+            const metadataModal = document.getElementById('metadata-modal-overlay');
+            if (
+                (lib && lib.style.display === 'flex') ||
+                (mod && mod.style.display === 'flex') ||
+                (help && help.style.display === 'flex') ||
+                (editorModal && editorModal.style.display === 'flex') ||
+                (metadataModal && metadataModal.style.display === 'flex')
+            ) {
+                if (e.key === 'Escape') {
+                    closeContentEditor();
+                    closeMetadataEditor();
+                }
+                return;
+            }
 
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === '=' || e.key === '+') { e.preventDefault(); adjustImgZoom(15); return; }

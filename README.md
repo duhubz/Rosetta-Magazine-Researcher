@@ -23,7 +23,7 @@ Use the **Library** button to download new issues from the cloud, or the **Searc
 - **Zoom & Formatting:** Hover your mouse over a page to zoom. Click the **MD** button to toggle between formatted markdown and raw text.
 - **Font Size & Theme:** Use the slider at the bottom to adjust text size, and the ☀️ button to switch between Dark and Light mode.
 - **Bookmarks:** Click the ⭐ button to save your current page. You can add custom tags to your bookmarks to easily filter them in the Bookmarks sidebar tab!
-- **Editing:** Click **✏️ Edit** to fix typos in the translation or update the magazine's tags/metadata. Click **Save** when done!
+- **Editing:** Click **✏️ Edit** for quick inline fixes, or use the per-section **Open Editor** buttons for the larger visual editor. Metadata now opens in a structured form. Click **Save** when done!
 
 ---
 
@@ -189,7 +189,7 @@ The ZIP is downloaded from the URLs in `zip_sources` (defined in the catalog by 
 
 ---
 
-## ⚙️ Configuration (config.yaml)
+## ⚙️ Configuration (`config.yaml`)
 
 You can customize the app by placing a `config.yaml` file next to the application (or executable). If the file is missing, sensible defaults are used. All paths are relative to the app root.
 
@@ -218,6 +218,21 @@ heartbeat:
   shutdown_after_idle_seconds: 20   # Auto-exit when browser tab is closed
   check_interval_seconds: 5
 ```
+
+---
+
+## 🛠️ Developer Notes
+
+For local development, you can create a `config.local.yaml` next to `config.yaml`. The app loads `config.yaml` first, then overlays any values from `config.local.yaml`.
+
+For example:
+
+```yaml
+server:
+  dev_mode: true
+```
+
+When `server.dev_mode` is `true`, the app runs with Flask's development reloader. Python and template changes are picked up automatically, and static files are served without cache so a normal browser refresh is enough to see CSS/JS changes. Dev mode also skips the idle auto-shutdown behavior.
 
 ---
 
