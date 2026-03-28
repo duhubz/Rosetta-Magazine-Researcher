@@ -323,9 +323,9 @@
             font-size: 12px;
         }
         .editor-modal-content {
-            width: min(1100px, 96vw);
-            max-width: min(1100px, 96vw);
-            height: min(860px, calc(100vh - 32px));
+            width: min(1280px, 80vw);
+            max-width: calc(100vw - 32px);
+            height: min(80vh, calc(100vh - 32px));
             max-height: calc(100vh - 32px);
             min-height: min(620px, calc(100vh - 32px));
             flex-direction: column;
@@ -1232,11 +1232,61 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             document.getElementById('editor-mode-split').classList.toggle('active', contentEditorMode === 'split');
         }
 
-        function setContentEditorMode(mode) {
+        function getContentEditorModeSelection(targetMode) {
+            if (!contentEditor || typeof contentEditor.getSelection !== 'function') return null;
+
+            const selection = contentEditor.getSelection();
+            if (!Array.isArray(selection) || selection.length < 2) return null;
+
+            const start = selection[0];
+            const end = selection[1];
+            const currentMode = typeof contentEditor.isWysiwygMode === 'function' && contentEditor.isWysiwygMode()
+                ? 'wysiwyg'
+                : 'markdown';
+
+            if (currentMode === targetMode || typeof contentEditor.convertPosToMatchEditorMode !== 'function') {
+                return [start, end];
+            }
+
+            return contentEditor.convertPosToMatchEditorMode(start, end, targetMode);
+        }
+
+        function restoreContentEditorSelection(selection, shouldFocus = true) {
+            if (!contentEditor || !selection || typeof contentEditor.setSelection !== 'function') {
+                if (shouldFocus && contentEditor && typeof contentEditor.focus === 'function') {
+                    contentEditor.focus();
+                }
+                return;
+            }
+
+            const [start, end] = selection;
+            contentEditor.setSelection(start, end);
+            if (shouldFocus && typeof contentEditor.focus === 'function') {
+                contentEditor.focus();
+            }
+        }
+
+        function deferContentEditorSelectionRestore(selection, shouldFocus = true) {
+            const restore = () => restoreContentEditorSelection(selection, shouldFocus);
+
+            if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(restore);
+                });
+            } else {
+                setTimeout(restore, 16);
+            }
+        }
+
+        function setContentEditorMode(mode, options = {}) {
+            const { preserveSelection = true, focusEditor = true } = options;
             contentEditorMode = mode;
             updateContentEditorModeButtons();
 
             if (!contentEditor) return;
+
+            const targetEditorMode = mode === 'wysiwyg' ? 'wysiwyg' : 'markdown';
+            const selection = preserveSelection ? getContentEditorModeSelection(targetEditorMode) : null;
 
             if (mode === 'wysiwyg') {
                 contentEditor.changePreviewStyle('tab');
@@ -1249,13 +1299,33 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
                 contentEditor.changeMode('markdown', true);
             }
 
-            setTimeout(syncContentEditorHeight, 0);
+            setTimeout(() => {
+                syncContentEditorHeight();
+                deferContentEditorSelectionRestore(selection, focusEditor);
+            }, 0);
         }
 
         function syncContentEditorTheme() {
             const editorRoot = document.querySelector('#editor-modal-host .toastui-editor-defaultUI');
             if (!editorRoot) return;
             editorRoot.classList.toggle('toastui-editor-dark', !document.body.classList.contains('light-mode'));
+        }
+
+        function resetContentEditorToStart() {
+            if (!contentEditor) return;
+
+            if (typeof contentEditor.setScrollTop === 'function') {
+                contentEditor.setScrollTop(0);
+            }
+
+            const previewPane = document.querySelector('#editor-modal-host .toastui-editor-md-preview');
+            if (previewPane) previewPane.scrollTop = 0;
+
+            if (typeof contentEditor.moveCursorToStart === 'function') {
+                contentEditor.moveCursorToStart(true);
+            } else if (typeof contentEditor.focus === 'function') {
+                contentEditor.focus();
+            }
         }
 
         function openContentEditor(fieldKey) {
@@ -1268,14 +1338,14 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             const field = CONTENT_EDITOR_FIELDS[fieldKey];
             document.getElementById('editor-modal-title').innerText = field.title;
             document.getElementById('editor-modal-subtitle').innerText = field.subtitle;
-            contentEditor.setMarkdown(document.getElementById(field.textareaId).value || "");
-            setContentEditorMode(contentEditorMode);
+            contentEditor.setMarkdown(document.getElementById(field.textareaId).value || "", false);
+            setContentEditorMode(contentEditorMode, { preserveSelection: false, focusEditor: false });
             syncContentEditorHeight();
             syncContentEditorTheme();
             setTimeout(() => {
-                setContentEditorMode(contentEditorMode);
+                setContentEditorMode(contentEditorMode, { preserveSelection: false, focusEditor: false });
                 syncContentEditorHeight();
-                contentEditor.focus();
+                resetContentEditorToStart();
             }, 0);
         }
 
