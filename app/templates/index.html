@@ -2280,7 +2280,7 @@ function renderLibrary() {
 
             // 5. Fetch Metadata and Transcription
             try {
-                const res = await fetch(`/api/text?mag=${encodeURIComponent(mag)}&page=${page}`);
+                const res = await fetch(`/api/text?mag=${encodeURIComponent(mag)}&page=${page}&t=${Date.now()}`);
                 if (!res.ok) throw new Error("Server error fetching text");
                 currentRawData = await res.json();
             } catch (err) {

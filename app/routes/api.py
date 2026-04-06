@@ -19,6 +19,13 @@ from app.utils import get_safe_path
 
 bp = Blueprint("api", __name__)
 
+@bp.after_request
+def add_header(response):
+    """Disable caching for all API responses."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, public, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @bp.route("/ping")
 def ping():
