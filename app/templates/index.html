@@ -2349,16 +2349,38 @@ function renderLibrary() {
 
         function renderContent() {
             if (!currentRawData) return;
-            const boxes = {'jp-box': currentRawData.jp, 'en-box': currentRawData.en, 'synopsis-box': currentRawData.sum};
-            for (const[id, text] of Object.entries(boxes)) {
+            const boxes = {
+                'jp-box': currentRawData.jp, 
+                'en-box': currentRawData.en, 
+                'synopsis-box': currentRawData.sum
+            };
+
+            for (const [id, text] of Object.entries(boxes)) {
                 const el = document.getElementById(id);
-                if (isMarkdown) { el.innerHTML = marked.parse(text); el.classList.add('markdown-mode'); }
-                else { el.innerText = text; el.classList.remove('markdown-mode'); }
+                if (!el) continue;
+
+                // Ensure we are working with a string
+                const content = text || "";
+
+                if (isMarkdown) {
+                    // THE FIX: Escape ampersands first, then brackets.
+                    // This ensures the ampersand in &lt; doesn't get double-encoded.
+                    const safeText = content
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;");
+                    
+                    el.innerHTML = marked.parse(safeText); 
+                    el.classList.add('markdown-mode'); 
+                } else { 
+                    el.innerText = content; 
+                    el.classList.remove('markdown-mode'); 
+                }
             }
             
+            // ... (keep the rest of your hover magic code below)
             if (isMarkdown && currentRawData.coordinates && currentRawData.coordinates.length > 0) {
                 attachTextHoverMagic();
-                
                 if (window.activeSearchTerms) {
                     setTimeout(() => triggerSearchHighlight(window.activeSearchTerms), 100);
                 }
