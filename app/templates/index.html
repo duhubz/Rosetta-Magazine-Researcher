@@ -1696,7 +1696,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             let changed = false;
             if (localFiles.includes(oldVal)) {
                 magSelect.value = oldVal;
-            } else if(localFiles.length > 0) {
+            } else if(localFiles.length > 0 && !magSelect.value) {
                 magSelect.value = localFiles[0];
                 changed = true;
             }
@@ -2227,49 +2227,85 @@ function renderLibrary() {
         }, 1500);
 
         async function readIssue(filename) {
-            // Show loading text while it fetches the new list
-            document.getElementById('modal-action-area').innerHTML = `<div style="text-align:center; color:var(--accent); font-weight:bold;">Loading...</div>`;
+            const actionArea = document.getElementById('modal-action-area');
+            actionArea.innerHTML = `<div style="text-align:center; color:var(--accent); font-weight:bold;">🔄 Opening Issue...</div>`;
             
-            await init(); // Force a background refresh of the local files list!
-            
+            // Refresh the local cache to ensure it sees the newly downloaded file
+            await init(); 
+
+            // Find the full relative path that matches the filename we just downloaded
             const match = localFiles.find(f => f.endsWith(filename));
-            if(match) {
+            
+            if (match) {
                 magSelect.value = match;
                 pageInput.value = 1;
+                
+                // Final sanity check for the title bar
+                document.getElementById('mag-input').value = pathToLabel[match] || filename;
+                
                 update();
+                closeModal();
+                toggleLibrary(false);
+                // Collapse sidebar on small screens to show the mag
+                if (document.body.clientWidth < 1000) document.getElementById('sidebar').classList.add('collapsed');
+            } else {
+                actionArea.innerHTML = `<div style="color:#ff4d4d; font-weight:bold;">Error: Could not find file path. Try refreshing.</div>`;
             }
-            closeModal();
-            toggleLibrary(false);
-            if (document.body.clientWidth < 800) document.getElementById('sidebar').classList.add('collapsed'); 
         }
 
         async function update(targetPage = null, searchTerms = null) {
             if (searchTerms) window.activeSearchTerms = searchTerms;
             else window.activeSearchTerms = null;
+
+            // 1. Determine which magazine to load
+            const mag = magSelect.value; 
+            if (!mag) {
+                console.error("No magazine path found in mag-select.");
+                return;
+            }
+
+            // 2. Determine which page to load
             if (targetPage) pageInput.value = targetPage;
-            const mag = magSelect.value;
             const page = pageInput.value;
-            if(!mag) return;
-            document.getElementById('mag-input').value = pathToLabel[mag] || "";
+
+            // 3. IMMEDIATELY sync the title bar and clear the screen
+            // This prevents "ghosting" from the previous magazine
+            document.getElementById('mag-input').value = pathToLabel[mag] || mag.split('/').pop();
+            img.src = ""; // Clear image while loading
+            document.getElementById('page-title').innerText = "Loading Issue...";
             
+            // 4. Update the Scanned Image
             img.src = `/api/render?mag=${encodeURIComponent(mag)}&page=${page-1}&zoom=1.5&t=${Date.now()}`;
-            
             adjustImgZoom(0);
 
-            const res = await fetch(`/api/text?mag=${encodeURIComponent(mag)}&page=${page}`);
-            currentRawData = await res.json();
-            maxPage = currentRawData.total_pages;
-            
-            drawCoordinateBoxes(currentRawData.coordinates);
-            
+            // 5. Fetch Metadata and Transcription
+            try {
+                const res = await fetch(`/api/text?mag=${encodeURIComponent(mag)}&page=${page}`);
+                if (!res.ok) throw new Error("Server error fetching text");
+                currentRawData = await res.json();
+            } catch (err) {
+                console.warn("Could not fetch page text, showing empty state:", err);
+                currentRawData = {
+                    jp: "No transcription found for this page.",
+                    en: "",
+                    sum: "",
+                    total_pages: 1,
+                    metadata: metadataCache[mag] || {},
+                    raw_meta: ""
+                };
+            }
+
+            // 6. Refresh the full UI
+            maxPage = currentRawData.total_pages || 1;
+            drawCoordinateBoxes(currentRawData.coordinates || []);
             renderContent();
-            renderMetadata(currentRawData.metadata, page, mag);
+            renderMetadata(currentRawData.metadata || {}, page, mag);
             
+            // 7. Reset editing states
             closeContentEditor();
             closeMetadataEditor();
             closeBookmarkModal();
-            closeConfirmModal();
-            if(isEditing) { isEditing = false; toggleEdit(); }
+            if (isEditing) { isEditing = false; toggleEdit(); }
         }
 
         function renderMetadata(meta, page, filename) {
@@ -2616,21 +2652,28 @@ function renderLibrary() {
             }
         });
 
-        // 1. Instantly load the magazine the moment it is clicked in the dropdown list
+        // Triggers when selecting from the dropdown or typing
         document.getElementById('mag-input').addEventListener('input', (e) => {
             const path = labelToPath[e.target.value];
-            if (path) {
+            if (path && path !== magSelect.value) {
                 magSelect.value = path;
-                pageInput.value = 1;
+                pageInput.value = 1; // Force reset to page 1
                 update();
-                e.target.blur(); // Instantly un-select the box so arrow keys work!
+                e.target.blur(); // Remove focus so arrow keys work for pages
             }
         });
 
-        // 2. If they type nonsense and click away, revert the text back to the actual magazine name
+        // Safety check: if they finish typing or select an item
         document.getElementById('mag-input').addEventListener('change', (e) => {
             const path = labelToPath[e.target.value];
-            if (!path) {
+            if (path) {
+                if (path !== magSelect.value) {
+                    magSelect.value = path;
+                    pageInput.value = 1;
+                    update();
+                }
+            } else {
+                // Revert to current mag if they typed nonsense
                 e.target.value = pathToLabel[magSelect.value] || "";
             }
         });
