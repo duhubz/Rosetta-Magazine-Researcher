@@ -2305,7 +2305,7 @@ function renderLibrary() {
             closeContentEditor();
             closeMetadataEditor();
             closeBookmarkModal();
-            if (isEditing) { isEditing = false; toggleEdit(); }
+            if (isEditing) { toggleEdit(); }
         }
 
         function renderMetadata(meta, page, filename) {
@@ -2433,8 +2433,27 @@ function renderLibrary() {
             };
             const btn = document.getElementById('save-btn');
             btn.innerText = "Saving...";
-            const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-            if(res.ok) { btn.innerText = "💾 Save"; closeContentEditor(); closeMetadataEditor(); isEditing = false; toggleEdit(); update(); }
+            
+            try {
+                const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+                if(res.ok) { 
+                    btn.innerText = "💾 Save"; 
+                    closeContentEditor(); 
+                    closeMetadataEditor(); 
+                    
+                    // FIX: Properly turn off Edit Mode without getting the UI trapped!
+                    if (isEditing) { toggleEdit(); } 
+                    
+                    // Delay the refresh slightly to ensure the server finishes writing the file to disk
+                    setTimeout(() => { update(); }, 200); 
+                } else {
+                    btn.innerText = "❌ Error";
+                    setTimeout(() => btn.innerText = "💾 Save", 2000);
+                }
+            } catch (e) {
+                btn.innerText = "❌ Error";
+                setTimeout(() => btn.innerText = "💾 Save", 2000);
+            }
         }
 
         async function fetchBookmarks() {
