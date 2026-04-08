@@ -8,6 +8,7 @@ import threading
 import time
 import urllib.request
 import zipfile
+from pathlib import Path
 
 import fitz
 from flask import Blueprint, Response, jsonify, request, send_file
@@ -159,22 +160,28 @@ def save_text():
     data = request.json
     rel_path = data["mag"]
     page_num = int(data["page"])
-    pdf_path = get_safe_path(rel_path)
+    pdf_path = Path(get_safe_path(rel_path)) # Ensure it is a Path object
     new_page_content = (
         f"{data['jp']}\n\n#GA-TRANSLATION\n{data['en']}\n\n#GA-SUMMARY\n{data['sum']}"
     )
     meta_content = data.get("meta", "")
 
     try:
-        partner_zip = metadata.get_partner_zip(rel_path)
+        # 1. Strictly look for a ZIP with the exact same name as the PDF
+        potential_zip = pdf_path.with_suffix('.zip')
+        partner_zip = potential_zip if potential_zip.exists() else None
+
+        # 2. Strictly look for a Master File with the exact same name
         master_filename = f"{pdf_path.stem}_COMPLETE.txt"
-        master_path = next(pdf_path.parent.glob("*_COMPLETE.txt"), None)
+        master_path = pdf_path.parent / master_filename
+        if not master_path.exists():
+            master_path = None
         
         # Check if we should be using the "Master File" (_COMPLETE.txt) format
         uses_master = master_path or (
             partner_zip
             and any(
-                n.endswith("_COMPLETE.txt")
+                n.split("/")[-1].lower() == master_filename.lower()
                 for n in zipfile.ZipFile(partner_zip, "r").namelist()
             )
         )
@@ -186,7 +193,7 @@ def save_text():
             else:
                 # Scenario: Master File is inside a ZIP
                 with zipfile.ZipFile(partner_zip, "r") as z:
-                    z_master = next(n for n in z.namelist() if n.endswith("_COMPLETE.txt"))
+                    z_master = next(n for n in z.namelist() if n.split("/")[-1].lower() == master_filename.lower())
                     raw_text = z.read(z_master).decode("utf-8")
 
             # Update the specific page inside the master text
@@ -198,7 +205,6 @@ def save_text():
 
             if master_path:
                 master_path.write_text(new_master_text, encoding="utf-8")
-                # Save metadata to loose file since we are in "loose file mode"
                 loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
                 loose_meta.write_text(meta_content, encoding="utf-8")
             else:
@@ -208,7 +214,8 @@ def save_text():
         else:
             # Scenario: Individual page files (_p001.txt, etc)
             content_with_header = f"#GA-TRANSCRIPTION\n{new_page_content}"
-            pattern = re.compile(rf"_p0*{page_num}\.txt$", re.IGNORECASE)
+            # Strictly lock the search to this exact PDF's stem
+            pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p0*{page_num}\.txt$", re.IGNORECASE)
             
             if partner_zip:
                 target_filename = f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
@@ -220,22 +227,14 @@ def save_text():
                 zip_utils.update_zip_content(partner_zip, target_filename, content_with_header)
                 zip_utils.update_zip_content(partner_zip, "metadata.txt", meta_content)
             else:
-                # Save as a loose individual page file
-                target_filepath = None
-                for lp in pdf_path.parent.glob("*.txt"):
-                    if pattern.search(lp.name):
-                        target_filepath = lp
-                        break
-                if not target_filepath:
-                    target_filepath = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
+                # Save as a loose individual page file strictly tied to the PDF name
+                target_filepath = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
                 target_filepath.write_text(content_with_header, encoding="utf-8")
                 
                 loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
                 loose_meta.write_text(meta_content, encoding="utf-8")
 
         # --- CLEANUP LOGIC ---
-        # If we just saved to a ZIP, delete any loose metadata files that might 
-        # conflict or confuse the app later.
         if partner_zip:
             loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
             generic_meta = pdf_path.parent / "metadata.txt"
