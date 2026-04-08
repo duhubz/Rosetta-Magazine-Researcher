@@ -2363,14 +2363,14 @@ function renderLibrary() {
                 const content = text || "";
 
                 if (isMarkdown) {
-                    // THE FIX: Escape ampersands first, then brackets.
-                    // This ensures the ampersand in &lt; doesn't get double-encoded.
+                    // THE FIX: Escape HTML characters so math symbols (<, >) don't break the page
                     let safeText = content
                         .replace(/&/g, "&amp;")
                         .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;");
+                        .replace(/>/g, "&gt;")
+                        // NEW FIX: Restore <br> tags so multi-line table cells still work!
+                        .replace(/&lt;br\s*\/?&gt;/gi, "<br>");
                     
-                    // --- START OF NEW FIX ---
                     // Normalize Markdown lists to ensure BOTH sides generate the exact same HTML tags
                     // (Sometimes the AI copies Japanese bullets '・' directly into the English text!)
                     if (id === 'jp-box' || id === 'en-box') {
@@ -2379,7 +2379,6 @@ function renderLibrary() {
                         // 2. Add a space after numbered lists (e.g., '1.「' becomes '1. 「')
                         safeText = safeText.replace(/^\s*([0-9]+\.)([^\s])/gm, '$1 $2'); 
                     }
-                    // --- END OF NEW FIX ---
 
                     el.innerHTML = marked.parse(safeText); 
                     el.classList.add('markdown-mode'); 
