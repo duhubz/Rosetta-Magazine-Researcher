@@ -2424,7 +2424,8 @@ function renderLibrary() {
 
         async function saveCorrections() {
             const payload = {
-                mag: magSelect.value, page: pageInput.value,
+                mag: magSelect.value, 
+                page: parseInt(pageInput.value, 10), // <-- FIX: Force this to be a strict Integer
                 jp: document.getElementById('jp-edit').value,
                 en: document.getElementById('en-edit').value,
                 sum: document.getElementById('sum-edit').value,
@@ -2436,22 +2437,18 @@ function renderLibrary() {
             try {
                 const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
                 if(res.ok) { 
-                    // 1. Show a brief success message on the button, then revert it
                     btn.innerText = "✅ Saved!"; 
                     setTimeout(() => btn.innerText = "💾 Save", 2000);
                     
-                    // 2. Update the local cache silently so we don't have to reload the page!
                     if (currentRawData) {
                         currentRawData.jp = payload.jp;
                         currentRawData.en = payload.en;
                         currentRawData.sum = payload.sum;
                         currentRawData.raw_meta = payload.meta;
                         
-                        // Also update the hidden viewer titles so they are ready when you exit Edit Mode
                         currentRawData.metadata = parseMetadataText(payload.meta).fields;
                         renderMetadata(currentRawData.metadata, payload.page, payload.mag);
                     }
-                    
                 } else {
                     btn.innerText = "❌ Error";
                     setTimeout(() => btn.innerText = "💾 Save", 2000);
