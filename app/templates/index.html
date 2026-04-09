@@ -49,6 +49,44 @@
             margin-top: 0;
         }
 
+        /* --- ZONE EDITOR CSS --- */
+        .zone-edit-mode .spatial-box {
+            opacity: 1 !important;
+            border-style: solid !important;
+            border-color: #fde68a !important;
+            background-color: rgba(253, 230, 138, 0.2) !important;
+            cursor: move !important;
+            z-index: 50;
+        }
+        .zone-edit-mode .spatial-box.selected-zone {
+            border-color: #ff5252 !important;
+            background-color: rgba(255, 82, 82, 0.3) !important;
+            box-shadow: 0 0 10px rgba(255, 82, 82, 0.8);
+            z-index: 60;
+        }
+        /* --- 4-CORNER RESIZE HANDLES --- */
+        .resize-handle {
+            display: none; position: absolute; width: 12px; height: 12px; 
+            background: #ff5252; border-radius: 50%; pointer-events: auto;
+            border: 2px solid white; box-sizing: border-box;
+        }
+        .resize-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+        .resize-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+        .resize-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+        .resize-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+        .zone-edit-mode .selected-zone .resize-handle { display: block; }
+        .zone-edit-mode .selected-zone .resize-handle { display: block; }
+        
+        #zone-editor-panel {
+            position: absolute; top: 20px; left: 20px; background: rgba(36, 37, 38, 0.95);
+            border: 1px solid var(--accent); padding: 15px; border-radius: 8px;
+            z-index: 1000; display: none; color: white; width: 250px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+        }
+        #zone-editor-panel h3 { margin: 0 0 10px 0; font-size: 14px; color: var(--accent); }
+        #zone-editor-panel textarea { width: 100%; height: 80px; margin-bottom: 10px; box-sizing: border-box; }
+        #zone-editor-panel button { width: 100%; margin-bottom: 5px; }
+
         #main-container { 
             display: flex; width: 100vw; flex: 1; /* Takes all remaining height above the toolbar */
             overflow: hidden; 
@@ -635,6 +673,23 @@
     <div id="main-container">
         <div id="left">
             <div id="img-container">
+                <!-- NEW: Zone Editor Floating Panel -->
+                <div id="zone-editor-panel">
+                    <h3 id="zone-editor-handle" style="cursor: grab; margin: 0 0 10px 0; font-size: 14px; color: var(--accent); padding-bottom: 5px; border-bottom: 1px solid #444; user-select: none;">✥ Drag to Move Panel</h3>
+                    <button class="ctrl-btn" style="background:#1e8e3e;" onclick="addNewZone()">+ Add New Box</button>
+                    <div id="zone-selected-tools" style="display:none; margin-top: 10px;">
+                        <span style="font-size:11px; color:#9aa0a6;">Linked Japanese Text:</span>
+                        <textarea id="zone-text-input" oninput="updateSelectedZoneText()" placeholder="Type or paste the exact Japanese text from the editor here..."></textarea>
+                        <div style="display:flex; gap:5px; margin-bottom:5px;">
+                            <button class="ctrl-btn" style="background:#ff9800; color:#000; flex:1;" onclick="splitSelectedZone()">✂️ Split Box</button>
+                            <button class="ctrl-btn" style="background:#dc3545; flex:1;" onclick="deleteSelectedZone()">🗑️ Delete</button>
+                        </div>
+                    </div>
+                    <div id="zone-unselected" style="font-size:11px; color:#aaa; text-align:center; padding: 10px 0;">
+                        Click a box to edit or drag its edges to resize.
+                    </div>
+                </div>
+                
                 <img id="page-img" src="">
             </div>
         </div>
@@ -2305,8 +2360,10 @@ function renderLibrary() {
             closeContentEditor();
             closeMetadataEditor();
             closeBookmarkModal();
-            if (isEditing) { toggleEdit(); }
-        }
+            if (isEditing) { 
+                isEditing = false; // Trick the toggle into turning it back ON
+                toggleEdit(); 
+            }}
 
         function renderMetadata(meta, page, filename) {
             const titleEl = document.getElementById('page-title');
@@ -2405,6 +2462,9 @@ function renderLibrary() {
             document.getElementById('edit-btn').classList.toggle('active', isEditing);
             document.getElementById('save-btn').style.display = isEditing ? 'inline-block' : 'none';
             document.body.classList.toggle('editing-active', isEditing);
+            isZoneEditMode = isEditing;
+            document.getElementById('img-container').classList.toggle('zone-edit-mode', isZoneEditMode);
+            document.getElementById('zone-editor-panel').style.display = isZoneEditMode ? 'block' : 'none';
             
             if(isEditing) {
                 document.getElementById('jp-edit').value = currentRawData.jp;
@@ -2415,7 +2475,8 @@ function renderLibrary() {
             } else { 
                 closeContentEditor();
                 closeMetadataEditor();
-                renderContent(); 
+                renderContent();
+                drawCoordinateBoxes(currentRawData.coordinates ||[]);
             }
             
             viewBoxes.forEach(id => document.getElementById(id).style.display = isEditing ? 'none' : 'block');
@@ -2423,13 +2484,54 @@ function renderLibrary() {
         }
 
         async function saveCorrections() {
+            // --- HARVEST THE EDITED BOXES ---
+            const coordsGroup = {};
+            let maxIndex = -1;
+            const padding = 5; 
+            
+            // First pass: find the highest existing index safely
+            document.querySelectorAll('.spatial-box').forEach(box => {
+                if (box.dataset.index) {
+                    let parsed = parseInt(box.dataset.index, 10);
+                    if (!isNaN(parsed)) maxIndex = Math.max(maxIndex, parsed);
+                }
+            });
+
+            document.querySelectorAll('.spatial-box').forEach(box => {
+                let idx = box.dataset.index;
+                if (!idx) {
+                    maxIndex++;
+                    idx = maxIndex.toString();
+                    box.dataset.index = idx; 
+                }
+                
+                const text = (box.dataset.jpText || "").trim();
+                const t = parseFloat(box.style.top);
+                const l = parseFloat(box.style.left);
+                const h = parseFloat(box.style.height);
+                const w = parseFloat(box.style.width);
+                
+                const ymin = Math.max(0, Math.round(t * 10) + padding);
+                const xmin = Math.max(0, Math.round(l * 10) + padding);
+                const ymax = Math.min(1000, Math.round((t + h) * 10) - padding);
+                const xmax = Math.min(1000, Math.round((l + w) * 10) - padding);
+                
+                if (!coordsGroup[idx]) coordsGroup[idx] = { text: text, boxes: [] };
+                coordsGroup[idx].boxes.push([ymin, xmin, ymax, xmax]);
+                if (text) coordsGroup[idx].text = text; 
+            });
+
+            const newCoords = Object.values(coordsGroup);
+            // -------------------------------------
+
             const payload = {
                 mag: magSelect.value, 
-                page: parseInt(pageInput.value, 10), // <-- FIX: Force this to be a strict Integer
+                page: parseInt(pageInput.value, 10),
                 jp: document.getElementById('jp-edit').value,
                 en: document.getElementById('en-edit').value,
                 sum: document.getElementById('sum-edit').value,
-                meta: document.getElementById('meta-edit').value
+                meta: document.getElementById('meta-edit').value,
+                coords: newCoords 
             };
             const btn = document.getElementById('save-btn');
             btn.innerText = "Saving...";
@@ -2445,6 +2547,7 @@ function renderLibrary() {
                         currentRawData.en = payload.en;
                         currentRawData.sum = payload.sum;
                         currentRawData.raw_meta = payload.meta;
+                        currentRawData.coordinates = payload.coords; 
                         
                         currentRawData.metadata = parseMetadataText(payload.meta).fields;
                         renderMetadata(currentRawData.metadata, payload.page, payload.mag);
@@ -2767,6 +2870,13 @@ function renderLibrary() {
                     const boxDiv = document.createElement('div');
                     boxDiv.className = 'spatial-box';
                     
+                    // Smart Z-Indexing: Smaller boxes get a higher Z-Index so they sit on top!
+                    const heightPct = ymax - ymin;
+                    const widthPct = xmax - xmin;
+                    boxDiv.style.zIndex = Math.floor(45 - ((heightPct * widthPct) / 280));
+                    
+                    addResizeHandles(boxDiv);
+                    
                     boxDiv.style.top = `${ymin}%`;
                     boxDiv.style.left = `${xmin}%`;
                     boxDiv.style.height = `${ymax - ymin}%`;
@@ -2987,6 +3097,182 @@ function renderLibrary() {
                 }
             });
         }
+
+        // ==========================================
+        // ZONE EDITOR ENGINE
+        // ==========================================
+        let isZoneEditMode = false;
+        let selectedZone = null;
+        let isResizing = false, isDragging = false;
+        let startX, startY, startW, startH, startT, startL;
+
+        let resizeDir = ''; // Tracks which corner is being dragged
+        
+        // Helper function to slap 4 corners onto any box
+        function addResizeHandles(box) {['nw', 'ne', 'sw', 'se'].forEach(dir => {
+                const h = document.createElement('div');
+                h.className = `resize-handle ${dir}`;
+                h.dataset.dir = dir;
+                box.appendChild(h);
+            });
+        }
+        
+        // Panel Dragging Variables
+        const zonePanel = document.getElementById('zone-editor-panel');
+        const zoneHandle = document.getElementById('zone-editor-handle');
+        let isDraggingPanel = false, panelStartX, panelStartY, panelStartLeft, panelStartTop;
+
+        function selectZone(box) {
+            if (selectedZone) selectedZone.classList.remove('selected-zone');
+            selectedZone = box;
+            if (selectedZone) {
+                selectedZone.classList.add('selected-zone');
+                document.getElementById('zone-selected-tools').style.display = 'block';
+                document.getElementById('zone-unselected').style.display = 'none';
+                document.getElementById('zone-text-input').value = selectedZone.dataset.jpText || "";
+            } else {
+                document.getElementById('zone-selected-tools').style.display = 'none';
+                document.getElementById('zone-unselected').style.display = 'block';
+            }
+        }
+
+        function updateSelectedZoneText() {
+            if (selectedZone) selectedZone.dataset.jpText = document.getElementById('zone-text-input').value;
+        }
+
+        function deleteSelectedZone() {
+            if (selectedZone) { selectedZone.remove(); selectZone(null); }
+        }
+
+        function addNewZone() {
+            const boxDiv = document.createElement('div');
+            boxDiv.className = 'spatial-box selected-zone';
+            boxDiv.style.top = '40%'; boxDiv.style.left = '40%';
+            boxDiv.style.height = '10%'; boxDiv.style.width = '20%';
+            boxDiv.dataset.jpText = "";
+            // Note: We leave dataset.index blank. The harvester will auto-assign it a fresh ID!
+            
+            addResizeHandles(boxDiv);
+            
+            document.getElementById('img-container').appendChild(boxDiv);
+            selectZone(boxDiv);
+        }
+
+        function splitSelectedZone() {
+            if (!selectedZone) return;
+            const boxDiv = document.createElement('div');
+            boxDiv.className = 'spatial-box selected-zone';
+            
+            // Offset the new box slightly so it doesn't perfectly overlap
+            const currentTop = parseFloat(selectedZone.style.top);
+            const currentLeft = parseFloat(selectedZone.style.left);
+            boxDiv.style.top = (currentTop + 5) + '%'; 
+            boxDiv.style.left = (currentLeft + 5) + '%';
+            boxDiv.style.height = selectedZone.style.height; 
+            boxDiv.style.width = selectedZone.style.width;
+            
+            // CRITICAL: Clone the text and the ID so the system links them together!
+            boxDiv.dataset.jpText = selectedZone.dataset.jpText;
+            if (selectedZone.dataset.index) boxDiv.dataset.index = selectedZone.dataset.index;
+            
+            addResizeHandles(boxDiv);
+            
+            document.getElementById('img-container').appendChild(boxDiv);
+            selectZone(boxDiv);
+        }
+
+        // --- MOUSE TRACKERS ---
+        
+        // Panel Dragging Handle
+        if (zoneHandle) {
+            zoneHandle.addEventListener('mousedown', (e) => {
+                isDraggingPanel = true;
+                panelStartX = e.clientX; panelStartY = e.clientY;
+                panelStartLeft = zonePanel.offsetLeft; panelStartTop = zonePanel.offsetTop;
+                e.preventDefault();
+            });
+        }
+
+        // Box & Resize Handle Tracking
+        const imgCont = document.getElementById('img-container');
+        imgCont.addEventListener('mousedown', (e) => {
+            if (!isZoneEditMode) return;
+            if (e.target.closest('#zone-editor-panel')) return; 
+
+            if (e.target.classList.contains('resize-handle')) {
+                isResizing = true;
+                resizeDir = e.target.dataset.dir; // 'nw', 'ne', 'sw', or 'se'
+                selectZone(e.target.parentElement);
+                startW = parseFloat(selectedZone.style.width);
+                startH = parseFloat(selectedZone.style.height);
+                startT = parseFloat(selectedZone.style.top);
+                startL = parseFloat(selectedZone.style.left);
+                startX = e.clientX; startY = e.clientY;
+                e.stopPropagation();
+            } else if (e.target.classList.contains('spatial-box')) {
+                isDragging = true;
+                selectZone(e.target);
+                startT = parseFloat(selectedZone.style.top);
+                startL = parseFloat(selectedZone.style.left);
+                startX = e.clientX; startY = e.clientY;
+                e.stopPropagation();
+            } else {
+                selectZone(null); 
+            }
+        });
+
+        // Global Mouse Move & Up
+        window.addEventListener('mousemove', (e) => {
+            if (isDraggingPanel) {
+                zonePanel.style.left = (panelStartLeft + e.clientX - panelStartX) + 'px';
+                zonePanel.style.top = (panelStartTop + e.clientY - panelStartY) + 'px';
+                return;
+            }
+            if (!isZoneEditMode || !selectedZone || (!isResizing && !isDragging)) return;
+            
+            const rect = imgCont.getBoundingClientRect();
+            const dx = ((e.clientX - startX) / rect.width) * 100;
+            const dy = ((e.clientY - startY) / rect.height) * 100;
+            
+            if (isResizing) {
+                let newW = startW, newH = startH, newL = startL, newT = startT;
+                
+                // Calculate directional math
+                if (resizeDir.includes('e')) newW = startW + dx;
+                if (resizeDir.includes('s')) newH = startH + dy;
+                if (resizeDir.includes('w')) {
+                    newL = startL + dx;
+                    newW = startW - dx;
+                }
+                if (resizeDir.includes('n')) {
+                    newT = startT + dy;
+                    newH = startH - dy;
+                }
+
+                // Apply boundaries so it can't invert on itself
+                if (newW > 1) {
+                    selectedZone.style.width = newW + '%';
+                    if (resizeDir.includes('w')) selectedZone.style.left = newL + '%';
+                }
+                if (newH > 1) {
+                    selectedZone.style.height = newH + '%';
+                    if (resizeDir.includes('n')) selectedZone.style.top = newT + '%';
+                }
+            } else if (isDragging) {
+                selectedZone.style.left = (startL + dx) + '%';
+                selectedZone.style.top = (startT + dy) + '%';
+            }
+        });
+
+        window.addEventListener('mouseup', () => { 
+            isDraggingPanel = false; 
+            isResizing = false; 
+            isDragging = false; 
+            resizeDir = '';
+            if (typeof zoneHandle !== 'undefined' && zoneHandle) {
+                zoneHandle.style.cursor = 'grab';
+            }
+        });
 
         init(true);
     </script>

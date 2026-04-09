@@ -92,22 +92,17 @@ def get_text():
             sum_t = sub[1].strip() if len(sub) > 1 else ""
 
     meta = state.METADATA_CACHE.get(mag_rel_path, {})
-
     raw_meta = ""
-    partner_zip = metadata.get_partner_zip(mag_rel_path)
-    pdf_path = data_dir / mag_rel_path
+    
+    # --- FIX: Use exact file paths just like the save function! ---
+    pdf_path = Path(get_safe_path(mag_rel_path))
+    potential_zip = pdf_path.with_suffix('.zip')
+    partner_zip = potential_zip if potential_zip.exists() else None
 
     if partner_zip:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
-                meta_file = next(
-                    (
-                        n
-                        for n in z.namelist()
-                        if n.split("/")[-1].lower() == "metadata.txt"
-                    ),
-                    None,
-                )
+                meta_file = next((n for n in z.namelist() if n.split("/")[-1].lower() == "metadata.txt"), None)
                 if meta_file:
                     raw_meta = z.read(meta_file).decode("utf-8", errors="ignore")
         except Exception:
@@ -121,24 +116,27 @@ def get_text():
             raw_meta = generic_meta.read_text(encoding="utf-8", errors="ignore")
 
     coords_data =[]
+    coords_filename = f"{pdf_path.stem}_COORDINATES.json"
     
+    # Check inside the ZIP exactly where we saved it
     if partner_zip:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
-                coords_file = next((n for n in z.namelist() if n.endswith("_COORDINATES.json")), None)
+                coords_file = next((n for n in z.namelist() if n.split("/")[-1].lower() == coords_filename.lower()), None)
                 if coords_file:
                     all_coords = json.loads(z.read(coords_file).decode("utf-8"))
-                    # Find the array for the specific page being requested
                     coords_data = next((c.get("data",[]) for c in all_coords if str(c.get("page")) == str(int(pg))),[])
         except Exception:
             pass
 
+    # Check loose files if no ZIP exists
     if not coords_data:
-        loose_coords = next(pdf_path.parent.glob("*_COORDINATES.json"), None)
-        if loose_coords:
+        loose_coords = pdf_path.parent / coords_filename
+        if loose_coords.exists():
             try:
                 all_coords = json.loads(loose_coords.read_text(encoding="utf-8"))
-                coords_data = next((c.get("data",[]) for c in all_coords if str(c.get("page")) == str(int(pg))),[])
+                # THIS IS THE LINE THAT GOT CUT OFF:
+                coords_data = next((c.get("data",[]) for c in all_coords if str(c.get("page")) == str(int(pg)))),
             except Exception:
                 pass
 
@@ -160,24 +158,22 @@ def save_text():
     data = request.json
     rel_path = data["mag"]
     page_num = int(data["page"])
-    pdf_path = Path(get_safe_path(rel_path)) # Ensure it is a Path object
+    pdf_path = Path(get_safe_path(rel_path))
     new_page_content = (
         f"{data['jp']}\n\n#GA-TRANSLATION\n{data['en']}\n\n#GA-SUMMARY\n{data['sum']}"
     )
     meta_content = data.get("meta", "")
+    coords_data = data.get("coords") # <-- NEW: Grab the edited boxes!
 
     try:
-        # 1. Strictly look for a ZIP with the exact same name as the PDF
         potential_zip = pdf_path.with_suffix('.zip')
         partner_zip = potential_zip if potential_zip.exists() else None
 
-        # 2. Strictly look for a Master File with the exact same name
         master_filename = f"{pdf_path.stem}_COMPLETE.txt"
         master_path = pdf_path.parent / master_filename
         if not master_path.exists():
             master_path = None
         
-        # Check if we should be using the "Master File" (_COMPLETE.txt) format
         uses_master = master_path or (
             partner_zip
             and any(
@@ -188,19 +184,15 @@ def save_text():
 
         if uses_master:
             if master_path:
-                # Scenario: Loose Master File exists
                 raw_text = master_path.read_text(encoding="utf-8")
             else:
-                # Scenario: Master File is inside a ZIP
                 with zipfile.ZipFile(partner_zip, "r") as z:
                     z_master = next(n for n in z.namelist() if n.split("/")[-1].lower() == master_filename.lower())
                     raw_text = z.read(z_master).decode("utf-8")
 
-            # Update the specific page inside the master text
             pages = metadata.get_pages_from_master(raw_text)
             pages[page_num] = new_page_content
-            new_master_text = "\n\n".join(
-                [f"[[PAGE_{str(p).zfill(3)}]]\n{c}" for p, c in sorted(pages.items())]
+            new_master_text = "\n\n".join([f"[[PAGE_{str(p).zfill(3)}]]\n{c}" for p, c in sorted(pages.items())]
             )
 
             if master_path:
@@ -208,13 +200,10 @@ def save_text():
                 loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
                 loose_meta.write_text(meta_content, encoding="utf-8")
             else:
-                # Update both text and metadata inside the ZIP
                 zip_utils.update_zip_content(partner_zip, master_filename, new_master_text)
                 zip_utils.update_zip_content(partner_zip, "metadata.txt", meta_content)
         else:
-            # Scenario: Individual page files (_p001.txt, etc)
             content_with_header = f"#GA-TRANSCRIPTION\n{new_page_content}"
-            # Strictly lock the search to this exact PDF's stem
             pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p0*{page_num}\.txt$", re.IGNORECASE)
             
             if partner_zip:
@@ -227,21 +216,54 @@ def save_text():
                 zip_utils.update_zip_content(partner_zip, target_filename, content_with_header)
                 zip_utils.update_zip_content(partner_zip, "metadata.txt", meta_content)
             else:
-                # Save as a loose individual page file strictly tied to the PDF name
                 target_filepath = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
                 target_filepath.write_text(content_with_header, encoding="utf-8")
-                
                 loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
                 loose_meta.write_text(meta_content, encoding="utf-8")
+
+        # --- NEW: SAVE COORDINATES LOGIC ---
+        if coords_data is not None:
+            coords_filename = f"{pdf_path.stem}_COORDINATES.json"
+            all_coords =[]
+            
+            # 1. Read the existing coordinates JSON (if it exists)
+            if partner_zip:
+                try:
+                    with zipfile.ZipFile(partner_zip, "r") as z:
+                        z_coords = next((n for n in z.namelist() if n.split("/")[-1].lower() == coords_filename.lower()), None)
+                        if z_coords:
+                            all_coords = json.loads(z.read(z_coords).decode("utf-8"))
+                except Exception: pass
+            else:
+                loose_coords = pdf_path.parent / coords_filename
+                if loose_coords.exists():
+                    try:
+                        all_coords = json.loads(loose_coords.read_text(encoding="utf-8"))
+                    except Exception: pass
+            
+            # 2. Overwrite the specific page we just edited
+            page_found = False
+            for c in all_coords:
+                if str(c.get("page")) == str(page_num):
+                    c["data"] = coords_data
+                    page_found = True
+                    break
+            if not page_found:
+                all_coords.append({"page": page_num, "data": coords_data})
+                
+            # 3. Save it back to disk
+            new_coords_json = json.dumps(all_coords, ensure_ascii=False, indent=2)
+            if partner_zip:
+                zip_utils.update_zip_content(partner_zip, coords_filename, new_coords_json)
+            else:
+                (pdf_path.parent / coords_filename).write_text(new_coords_json, encoding="utf-8")
 
         # --- CLEANUP LOGIC ---
         if partner_zip:
             loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
             generic_meta = pdf_path.parent / "metadata.txt"
-            if loose_meta.exists():
-                os.remove(loose_meta)
-            if generic_meta.exists() and pdf_path.parent != cfg.data_dir():
-                os.remove(generic_meta)
+            if loose_meta.exists(): os.remove(loose_meta)
+            if generic_meta.exists() and pdf_path.parent != cfg.data_dir(): os.remove(generic_meta)
 
         metadata.load_metadata_cache()
         return jsonify({"status": "ok"})
