@@ -129,7 +129,7 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
                 master_zname = next(
-                    (n for n in z.namelist() if n.endswith("_COMPLETE.txt")), None
+                    (n for n in z.namelist() if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()), None
                 )
                 if master_zname:
                     pages = get_pages_from_master(
@@ -138,7 +138,7 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
                     if p_num_int in pages:
                         return pages[p_num_int]
 
-                pattern = re.compile(rf"_p0*{p_num_int}\.txt$", re.IGNORECASE)
+                pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p0*{p_num_int}\.txt$", re.IGNORECASE)
                 for zname in z.namelist():
                     if pattern.search(zname.split("/")[-1]):
                         return z.read(zname).decode("utf-8", errors="ignore")
@@ -146,17 +146,17 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
             pass
 
     # 2. SECONDARY: Look for loose Master File (_COMPLETE.txt)
-    master_path = next(pdf_path.parent.glob("*_COMPLETE.txt"), None)
-    if master_path:
+    master_file = pdf_path.parent / f"{pdf_path.stem}_COMPLETE.txt"
+    if master_file.exists():
         pages = get_pages_from_master(
-            master_path.read_text(encoding="utf-8", errors="ignore")
+            master_file.read_text(encoding="utf-8", errors="ignore")
         )
         if p_num_int in pages:
             return pages[p_num_int]
 
     # 3. FINAL FALLBACK: Look for loose individual _pXXX.txt files
-    pattern = re.compile(rf"_p0*{p_num_int}\.txt$", re.IGNORECASE)
-    for lp in pdf_path.parent.glob("*.txt"):
+    pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p0*{p_num_int}\.txt$", re.IGNORECASE)
+    for lp in pdf_path.parent.glob(f"{pdf_path.stem}_p*.txt"):
         if pattern.search(lp.name):
             return lp.read_text(encoding="utf-8", errors="ignore")
 

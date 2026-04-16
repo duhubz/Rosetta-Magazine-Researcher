@@ -2719,7 +2719,7 @@ function renderLibrary() {
                 });
                 const meta = metadataCache[r.mag] || {};
                 let resultTitle = meta.name ? meta.name : r.mag.split('/').pop().replace('.pdf', '');
-                if (meta.issue_name) resultTitle += ` - ${meta.issue_name}`;
+                if (meta.issue_name) resultTitle += ` - ${meta.date} - ${meta.issue_name}`;
 
                 div.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:11px;">${resultTitle} — P${r.page}</span><br><small>...${snip}...</small>`;
                 div.onclick = () => { magSelect.value = r.mag; update(r.page, data.terms_to_highlight); };

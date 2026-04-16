@@ -157,8 +157,10 @@ def search(
 
         pdf_path = data_dir / mag_rel_path
 
-        # Check for Master File locally
-        master_txt = next(pdf_path.parent.glob("*_COMPLETE.txt"), None)
+        # Check for Master File locally specifically tied to this PDF
+        master_file = pdf_path.parent / f"{pdf_path.stem}_COMPLETE.txt"
+        master_txt = master_file if master_file.exists() else None
+
         if master_txt:
             pages = metadata.get_pages_from_master(
                 master_txt.read_text(encoding="utf-8", errors="ignore")
@@ -166,8 +168,10 @@ def search(
             for p_num, p_text in pages.items():
                 scan_text(p_text, mag_rel_path, p_num)
         else:
-            for txt in pdf_path.parent.glob("*.txt"):
-                m = re.search(r"_p(\d+)\.txt$", txt.name, re.IGNORECASE)
+            # Check for loose page files specifically tied to this PDF
+            pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p(\d+)\.txt$", re.IGNORECASE)
+            for txt in pdf_path.parent.glob(f"{pdf_path.stem}_p*.txt"):
+                m = pattern.search(txt.name)
                 if m:
                     scan_text(
                         txt.read_text(encoding="utf-8", errors="ignore"),
@@ -180,8 +184,9 @@ def search(
         if partner_zip and not master_txt:
             try:
                 with zipfile.ZipFile(partner_zip, "r") as z:
+                    # Strictly match the master file for this specific PDF
                     master_zname = next(
-                        (n for n in z.namelist() if n.endswith("_COMPLETE.txt")), None
+                        (n for n in z.namelist() if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()), None
                     )
                     if master_zname:
                         pages = metadata.get_pages_from_master(
@@ -190,18 +195,14 @@ def search(
                         for p_num, p_text in pages.items():
                             scan_text(p_text, mag_rel_path, p_num)
                     else:
+                        # Strictly match individual page files for this specific PDF
+                        pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p(\d+)\.txt$", re.IGNORECASE)
                         for zname in z.namelist():
                             if zname.lower().endswith(".txt"):
-                                m = re.search(
-                                    r"_p(\d+)\.txt$",
-                                    zname.split("/")[-1],
-                                    re.IGNORECASE,
-                                )
+                                m = pattern.search(zname.split("/")[-1])
                                 if m:
                                     scan_text(
-                                        z.read(zname).decode(
-                                            "utf-8", errors="ignore"
-                                        ),
+                                        z.read(zname).decode("utf-8", errors="ignore"),
                                         mag_rel_path,
                                         int(m.group(1)),
                                     )
