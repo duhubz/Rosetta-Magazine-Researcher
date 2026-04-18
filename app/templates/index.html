@@ -2456,12 +2456,13 @@ function renderLibrary() {
 
         function toggleEdit() {
             isEditing = !isEditing;
-            const viewBoxes =["jp-box", "en-box", "synopsis-box", "meta-display"];
-            const editBoxes =["jp-edit", "en-edit", "sum-edit", "meta-edit-container"];
+            const viewBoxes = ["jp-box", "en-box", "synopsis-box", "meta-display"];
+            const editBoxes = ["jp-edit", "en-edit", "sum-edit", "meta-edit-container"];
             
             document.getElementById('edit-btn').classList.toggle('active', isEditing);
             document.getElementById('save-btn').style.display = isEditing ? 'inline-block' : 'none';
             document.body.classList.toggle('editing-active', isEditing);
+            
             isZoneEditMode = isEditing;
             document.getElementById('img-container').classList.toggle('zone-edit-mode', isZoneEditMode);
             document.getElementById('zone-editor-panel').style.display = isZoneEditMode ? 'block' : 'none';
@@ -2475,12 +2476,18 @@ function renderLibrary() {
             } else { 
                 closeContentEditor();
                 closeMetadataEditor();
+                
+                drawCoordinateBoxes(currentRawData.coordinates || []);
                 renderContent();
-                drawCoordinateBoxes(currentRawData.coordinates ||[]);
             }
             
+            // Toggle visibility
             viewBoxes.forEach(id => document.getElementById(id).style.display = isEditing ? 'none' : 'block');
             editBoxes.forEach(id => document.getElementById(id).style.display = isEditing ? 'block' : 'none');
+
+            if (!isEditing && isMarkdown) {
+                setTimeout(() => attachTextHoverMagic(), 50);
+            }
         }
 
         async function saveCorrections() {
