@@ -31,21 +31,6 @@ def create_app() -> Flask:
 
 def run_app() -> None:
     from app.services import metadata, state
-    import os
-
-    data_dir = cfg.data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    
-    welcome_filename = "Welcome.pdf"
-    destination_path = data_dir / welcome_filename
-    
-    internal_welcome_path = cfg.ROOT_DIR / "app" / "static" / welcome_filename
-
-    if internal_welcome_path.exists() and not destination_path.exists():
-        try:
-            shutil.copy2(internal_welcome_path, destination_path)
-        except Exception as e:
-            print(f"Note: Could not copy welcome PDF: {e}")
 
     dev_mode = cfg.server_dev_mode()
     port = cfg.server_port()

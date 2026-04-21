@@ -1822,8 +1822,6 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             pathToLabel = {};
             
             localFiles.forEach(m => {
-                if (m.toLowerCase().includes('Welcome.pdf')) return;
-
                 const meta = metadataCache[m] || {};
                 let label = meta.name ? meta.name : m.split('/').pop().replace('.pdf','');
                 if (meta.date) label += ` (${meta.date})`;
@@ -1842,20 +1840,12 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
             });
 
             let changed = false;
-            const welcomeFile = localFiles.find(f => f.toLowerCase().includes('Welcome.pdf'));
-
-            if (welcomeFile && !oldVal) {
-                magSelect.value = welcomeFile;
-                changed = true;
-            } else if (localFiles.includes(oldVal)) {
+            if (localFiles.includes(oldVal)) {
                 magSelect.value = oldVal;
-            } else if (welcomeFile) {
-                magSelect.value = welcomeFile;
-                changed = true;
             } else if (localFiles.length > 0) {
                 magSelect.value = localFiles[0];
                 changed = true;
-            }
+}
             
             document.getElementById('mag-input').value = pathToLabel[magSelect.value] || "";
 
