@@ -132,11 +132,14 @@ Here is how your folder should look (You can also use multiple subfolders if you
 **Text File (_COMPLETE.txt) format:**
 ```text
 [[PAGE_001]]
-(Transcribed text)
+#GA-TRANSCRIPTION
+(Transcription text goes here)
+
 #GA-TRANSLATION
-(Translated text)
+(Translation text goes here)
+
 #GA-SUMMARY
-(Summary)
+(Summary text goes here)
 
 [[PAGE_002]]
 ...
