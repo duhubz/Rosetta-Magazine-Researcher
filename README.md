@@ -11,6 +11,9 @@ Download the latest version for Windows, Mac, or Linux from our **[Releases Page
 * **Windows users:** Download the `.exe` file and double-click to run.
 * **Mac / Linux users:** Download the `.zip` file, extract it, and run the executable inside.
 
+**Note for Mac Users** - Because this app is not signed by an Apple Developer account, macOS may prevent it from opening. If you see an error saying the app is 'damaged' or 'from an unidentified developer,' open Terminal and run:
+xattr -cr /path/to/Rosetta_Magazine_Researcher.app"
+
 ---
 
 ## Notice on AI Translations

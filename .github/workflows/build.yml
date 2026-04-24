@@ -15,7 +15,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+          - os: ubuntu-latest
+          - os: macos-13  # Apple Intel Macs
+          - os: macos-14  # Apple Silicon Macs (M1/M2/M3)
 
     runs-on: ${{ matrix.os }}
 
@@ -49,21 +53,29 @@ jobs:
         path: dist/*.exe
 
     # ---------------------------------------------
-    # MAC BUILD
+    # MAC BUILD (Handles both Intel and Silicon)
     # ---------------------------------------------
     - name: Build Mac
-      if: matrix.os == 'macos-latest'
+      if: startsWith(matrix.os, 'macos')
       run: |
         pyinstaller --onefile --windowed --name "Rosetta_Magazine_Researcher" --add-data "app/templates:app/templates" --add-data "app/static:app/static" --collect-data certifi --collect-all fitz --hidden-import=yaml app.py
+        
         cd dist
-        zip -r Rosetta_Magazine_Researcher_Mac.zip Rosetta_Magazine_Researcher.app
+        # Rename the apps based on the OS runner so you know which is which
+        if [ "${{ matrix.os }}" == "macos-13" ]; then
+          mv Rosetta_Magazine_Researcher.app Rosetta_Mag_Researcher_Intel.app
+          zip -r Rosetta_Mag_Researcher_Mac_Intel.zip Rosetta_Mag_Researcher_Intel.app
+        else
+          mv Rosetta_Magazine_Researcher.app Rosetta_Mag_Researcher_Silicon.app
+          zip -r Rosetta_Mag_Researcher_Mac_Silicon.zip Rosetta_Mag_Researcher_Silicon.app
+        fi
 
     - name: Upload Mac File
-      if: matrix.os == 'macos-latest'
+      if: startsWith(matrix.os, 'macos')
       uses: actions/upload-artifact@v4
       with:
-        name: Mac-Executable
-        path: dist/Rosetta_Magazine_Researcher_Mac.zip
+        name: ${{ matrix.os == 'macos-13' && 'Mac-Intel-Executable' || 'Mac-Silicon-Executable' }}
+        path: dist/*.zip
 
     # ---------------------------------------------
     # LINUX BUILD
