@@ -88,7 +88,10 @@
         #zone-editor-panel button { width: 100%; margin-bottom: 5px; }
 
         #main-container { 
-            display: flex; width: 100vw; flex: 1; /* Takes all remaining height above the toolbar */
+            display: flex; 
+            width: 100vw; 
+            flex: 1;          /* Takes up all available vertical space */
+            min-height: 0;    /* CRITICAL: Allows the container to shrink to fit the space */
             overflow: hidden; 
         }
         
@@ -116,49 +119,83 @@
             transition: height 0.15s ease-out; 
         }
         
-        /* Update the main footer container */
         .controls { 
-            width: 100vw; 
-            flex-shrink: 0; 
-            box-sizing: border-box;
+            position: relative;
+            margin: 15px auto 25px;
             background: #202124; 
-            padding: 8px 20px; /* Reduced vertical padding slightly */
+            padding: 12px 20px; 
+            border-radius: 50px;       /* Back to the sleek "Pill" look */
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6); 
+            
             display: flex; 
-            flex-direction: column; /* Stack rows vertically */
-            gap: 8px; 
+            flex-wrap: wrap;           /* The magic "Fluid" property */
+            justify-content: center;   /* Keeps everything perfectly balanced */
             align-items: center; 
-            border-top: 1px solid #3c4043; 
+            gap: 10px 18px;            /* 10px vertical gap, 18px horizontal gap */
+            
+            width: fit-content;
+            max-width: 96vw;           /* Strictly stays on screen */
+            box-sizing: border-box;    
+            border: 1px solid #3c4043; 
+            backdrop-filter: blur(10px); 
             color: white; 
-            z-index: 3000;
+            z-index: 1000; 
+            flex-shrink: 0;
         }
 
-        /* Style the two internal rows */
-        .controls-row {
+        @media (max-width: 1000px) {
+            .controls { border-radius: 25px; padding: 15px; }
+        }
+
+        .controls-group {
             display: flex;
-            width: 100%;
             align-items: center;
-            justify-content: center;
-            gap: 12px;
+            gap: 10px;
+            white-space: nowrap; /* Prevents a group (like Prev/Next) from splitting apart */
         }
 
-        /* Make the magazine input much larger */
+
+        .controls .ctrl-btn, 
+        .controls .check-item {
+            white-space: nowrap !important; /* Keeps button text together */
+        }
+
+        /* Hide the little grey dividers on tiny screens so they don't look weird when stacked */
+        @media (max-width: 700px) {
+            .controls .divider { display: none; }
+        }
+
         #mag-input {
-            width: 100% !important;
-            max-width: 900px;
+            /* Increased Min to 300px, Factor to 60vw, and Max to 950px */
+            width: clamp(300px, 60vw, 950px); 
             
-            /* These values match your global input styles exactly */
-            background: #323639;
-            color: white;
+            background: rgba(255,255,255,0.07);
+            color: #8ab4f8;
             border: 1px solid #5f6368;
-            padding: 5px 10px; 
-            border-radius: 4px;
+            padding: 8px 20px; 
+            border-radius: 25px;
             outline: none;
-            
-            /* Remove the previously added bold/accent styles */
             font-size: 14px;
             font-weight: bold;
-            text-align: left;
+            
+            /* Changed to left-aligned: much easier to read long titles */
+            text-align: left; 
+            
+            white-space: nowrap;
+            overflow: hidden;
             text-overflow: ellipsis;
+            transition: width 0.2s ease-in-out;
+        }
+
+        #mag-input:hover, #mag-input:focus {
+            background: rgba(255,255,255,0.12);
+            border-color: #8ab4f8;
+        }
+
+        .mag-name-group {
+            flex: 1 1 300px;       /* Grow to fill space, but don't shrink below 300px */
+            max-width: 800px;      /* Don't let it get ridiculously wide on 4K monitors */
+            min-width: 250px;
         }
 
         /* Add a subtle highlight when focused to match other inputs */
@@ -244,7 +281,13 @@
         .ctrl-btn { background: #444; color: white; border: none; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 600; transition: 0.2s; }
         .ctrl-btn:hover, .ctrl-btn.active { background: var(--accent); color: #202124; }
         select, input[type=number], input[type=text] { background: #323639; color: white; border: 1px solid #5f6368; padding: 5px 10px; border-radius: 4px; outline: none; }
-        .divider { width: 1px; height: 22px; background: #5f6368; margin: 0 4px; }
+        
+        .divider {
+            width: 1px;
+            height: 20px;
+            background: #5f6368;
+            margin: 0 5px;
+        }
         
         .content-box { white-space: pre-wrap; font-family: "MS Mincho", serif; font-size: var(--font-size); line-height: 1.8; background: var(--box); padding: 18px; border-radius: 6px; margin-bottom: 20px; border: 1px solid var(--border); color: var(--text); }
         .content-box.markdown-mode { white-space: normal; word-wrap: break-word; }
@@ -1014,53 +1057,61 @@
     </div>
 
     <div class="controls">
-    <!-- TOP ROW: Primary Magazine Selection -->
-    <div class="controls-row">
-        <input type="text" id="mag-input" list="mag-select-list" placeholder="Search installed magazines..." onclick="this.select()">
-        <datalist id="mag-select-list"></datalist>
-        <select id="mag-select" style="display:none;"></select>
-    </div>
 
-    <!-- BOTTOM ROW: Tools, Navigation, and Zoom -->
-    <div class="controls-row">
-        <button id="lib-btn" class="ctrl-btn" onclick="toggleLibrary()">📚 Library</button>
-        <button id="sidebar-toggle" class="ctrl-btn" onclick="toggleSidebar()">🔍 Search</button>
-        <div class="divider"></div>
-        <button id="help-btn" class="ctrl-btn" onclick="toggleHelp()">❓ Help</button>
-        <button id="theme-btn" class="ctrl-btn" onclick="toggleTheme()">☀️</button>
-        <button id="zones-btn" class="ctrl-btn" onclick="toggleZones()">👁️ Zones</button>
-        <button id="manga-btn" class="ctrl-btn" onclick="toggleMangaMode()">💬 Manga</button>
-        <button id="md-toggle" class="ctrl-btn active" onclick="toggleMarkdown()">MD</button>
-        <button id="edit-btn" class="ctrl-btn" onclick="toggleEdit()">✏️ Edit</button>
-        <button id="save-btn" class="ctrl-btn" style="display:none; background:#28a745;" onclick="saveCorrections()">💾 Save</button>
-        <button id="bookmark-btn" class="ctrl-btn" onclick="toggleBookmark()">⭐</button>
-        
-        <div class="divider"></div>
-        
-        <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
-        <input type="number" id="page-num" value="1" min="1" style="width: 48px; text-align: center;">
-        <button class="ctrl-btn" onclick="changePage(1)">Next</button>
-        
+        <div class="controls-group">
+            <input type="text" id="mag-input" list="mag-select-list" placeholder="Select Magazine..." onclick="this.select()">
+            <datalist id="mag-select-list"></datalist>
+            <select id="mag-select" style="display:none;"></select>
+        </div>
+
         <div class="divider"></div>
 
-        <div style="display:flex; align-items:center; gap:8px;">
-            <button class="ctrl-btn" onclick="adjustImgZoom(-15)">🔍-</button>
-            <input type="text" id="zoom-input" value="100%" style="width: 45px; text-align: center; font-size: 11px; padding: 2px; background: transparent; border: 1px solid #5f6368; color: #9aa0a6; outline: none; border-radius: 4px;" onchange="setImgZoom(this.value)" onclick="this.select()">
-            <button class="ctrl-btn" onclick="adjustImgZoom(15)">🔍+</button>
-            
-            <div class="divider"></div>
-            
-            <span style="font-size: 11px; color: #9aa0a6;">Font</span>
-            <input type="range" min="12" max="40" value="17" oninput="updateFont(this.value)">
-            
-            <div class="divider"></div>
+        <div class="controls-group">
+            <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
+            <input type="number" id="page-num" value="1" min="1" style="width: 45px; text-align: center;">
+            <button class="ctrl-btn" onclick="changePage(1)">Next</button>
+        </div>
 
+        <div class="divider"></div>
+
+        <div class="controls-group">
             <label class="check-item"><input type="checkbox" id="check-jp" checked onchange="toggleSec('sec-jp-container', this.checked)"> Transcription</label>
             <label class="check-item"><input type="checkbox" id="check-en" checked onchange="toggleSec('sec-en-container', this.checked)"> Translation</label>
             <label class="check-item"><input type="checkbox" id="check-sum" checked onchange="toggleSec('sec-sum-container', this.checked)"> Summary</label>
         </div>
+
+        <div class="divider"></div>
+
+        <div class="controls-group">
+            <button id="zones-btn" class="ctrl-btn" onclick="toggleZones()" title="Toggle Zones">👁️ Zones</button>
+            <button id="manga-btn" class="ctrl-btn" onclick="toggleMangaMode()" title="Manga Mode">💬 Manga</button>
+            <button id="md-toggle" class="ctrl-btn active" onclick="toggleMarkdown()">MD</button>
+            <button id="edit-btn" class="ctrl-btn" onclick="toggleEdit()">✏️ Edit</button>
+            <button id="save-btn" class="ctrl-btn" style="display:none; background:#28a745;" onclick="saveCorrections()">💾 Save</button>
+            <button id="bookmark-btn" class="ctrl-btn" onclick="toggleBookmark()">⭐</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="controls-group">
+            <button class="ctrl-btn" onclick="adjustImgZoom(-15)">🔍-</button>
+            <input type="text" id="zoom-input" value="100%" style="width: 40px; text-align: center; font-size: 11px; background: transparent; border: none; color: #9aa0a6;">
+            <button class="ctrl-btn" onclick="adjustImgZoom(15)">🔍+</button>
+            <div class="divider"></div>
+            <span style="font-size: 11px; color: #9aa0a6;">Font</span>
+            <input type="range" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
+        </div>
+
+        <div class="divider"></div>
+        
+        <div class="controls-group">
+            <button id="lib-btn" class="ctrl-btn" onclick="toggleLibrary()">📚 Library</button>
+            <button id="sidebar-toggle" class="ctrl-btn" onclick="toggleSidebar()">🔍 Search</button>
+            <button id="help-btn" class="ctrl-btn" onclick="toggleHelp()">❓ Help</button>
+            <button id="theme-btn" class="ctrl-btn" onclick="toggleTheme()">☀️</button>
+        </div>
+
     </div>
-</div>
 
     <script>
         // Tell the Markdown parser to respect single line breaks
