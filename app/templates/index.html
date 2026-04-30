@@ -21,6 +21,29 @@
             background: var(--bg); color: var(--text); overflow: hidden; 
         }
 
+        .drag-handle {
+            cursor: grab;
+            color: #5f6368;
+            font-size: 16px;
+            padding: 0 4px;
+            margin-right: -4px;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            transition: color 0.2s;
+        }
+        .drag-handle:hover {
+            color: var(--accent);
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+        .controls-group.dragging {
+            opacity: 0.4;
+            transform: scale(0.98);
+            transition: transform 0.1s, opacity 0.1s;
+        }
+
         /* Tighten up the spacing around Markdown Headings */
         .content-box.markdown-mode h1, 
         .content-box.markdown-mode h2, 
@@ -170,7 +193,7 @@
 
         #mag-input {
             width: clamp(250px, 50vw, 800px); 
-            background: rgba(255,255,255,0.07);
+            background: rgba(240, 190, 190, 0.07);
             color: #ffffff;
             border: 1px solid #5f6368;
             /* Slimmer padding inside the mag title box */
@@ -1054,60 +1077,66 @@
 
     <div class="controls">
 
-        <div class="controls-group">
-            <input type="text" id="mag-input" list="mag-select-list" placeholder="Select Magazine..." onclick="this.select()">
-            <datalist id="mag-select-list"></datalist>
-            <select id="mag-select" style="display:none;"></select>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="controls-group">
-            <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
-            <input type="number" id="page-num" value="1" min="1" style="width: 45px; text-align: center;">
-            <button class="ctrl-btn" onclick="changePage(1)">Next</button>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="controls-group">
-            <label class="check-item"><input type="checkbox" id="check-jp" checked onchange="toggleSec('sec-jp-container', this.checked)"> Transcription</label>
-            <label class="check-item"><input type="checkbox" id="check-en" checked onchange="toggleSec('sec-en-container', this.checked)"> Translation</label>
-            <label class="check-item"><input type="checkbox" id="check-sum" checked onchange="toggleSec('sec-sum-container', this.checked)"> Summary</label>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="controls-group">
-            <button id="zones-btn" class="ctrl-btn" onclick="toggleZones()" title="Toggle Zones">👁️ Zones</button>
-            <button id="manga-btn" class="ctrl-btn" onclick="toggleMangaMode()" title="Manga Mode">💬 Manga</button>
-            <button id="md-toggle" class="ctrl-btn active" onclick="toggleMarkdown()">MD</button>
-            <button id="edit-btn" class="ctrl-btn" onclick="toggleEdit()">✏️ Edit</button>
-            <button id="save-btn" class="ctrl-btn" style="display:none; background:#28a745;" onclick="saveCorrections()">💾 Save</button>
-            <button id="bookmark-btn" class="ctrl-btn" onclick="toggleBookmark()">⭐</button>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="controls-group">
-            <button class="ctrl-btn" onclick="adjustImgZoom(-15)">🔍-</button>
-            <input type="text" id="zoom-input" value="100%" style="width: 40px; text-align: center; font-size: 11px; background: transparent; border: none; color: #9aa0a6;">
-            <button class="ctrl-btn" onclick="adjustImgZoom(15)">🔍+</button>
-            <div class="divider"></div>
-            <span style="font-size: 11px; color: #9aa0a6;">Font</span>
-            <input type="range" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="controls-group">
-            <button id="lib-btn" class="ctrl-btn" onclick="toggleLibrary()">📚 Library</button>
-            <button id="sidebar-toggle" class="ctrl-btn" onclick="toggleSidebar()">🔍 Search</button>
-            <button id="help-btn" class="ctrl-btn" onclick="toggleHelp()">❓ Help</button>
-            <button id="theme-btn" class="ctrl-btn" onclick="toggleTheme()">☀️</button>
-        </div>
-
+    <div class="controls-group" data-id="group-mag">
+        <span class="drag-handle" title="Drag to move">⋮⋮</span>
+        <input type="text" id="mag-input" list="mag-select-list" placeholder="Select Magazine..." onclick="this.select()">
+        <datalist id="mag-select-list"></datalist>
+        <select id="mag-select" style="display:none;"></select>
     </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group" data-id="group-nav">
+        <span class="drag-handle" title="Drag to move">⋮⋮</span>
+        <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
+        <input type="number" id="page-num" value="1" min="1" style="width: 45px; text-align: center;">
+        <button class="ctrl-btn" onclick="changePage(1)">Next</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group" data-id="group-sections">
+        <span class="drag-handle" title="Drag to move">⋮⋮</span>
+        <label class="check-item"><input type="checkbox" id="check-jp" checked onchange="toggleSec('sec-jp-container', this.checked)"> Transcription</label>
+        <label class="check-item"><input type="checkbox" id="check-en" checked onchange="toggleSec('sec-en-container', this.checked)"> Translation</label>
+        <label class="check-item"><input type="checkbox" id="check-sum" checked onchange="toggleSec('sec-sum-container', this.checked)"> Summary</label>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group" data-id="group-toggles">
+        <span class="drag-handle" title="Drag to move">⋮⋮</span>
+        <button id="zones-btn" class="ctrl-btn" onclick="toggleZones()" title="Toggle Zones">👁️ Zones</button>
+        <button id="manga-btn" class="ctrl-btn" onclick="toggleMangaMode()" title="Manga Mode">💬 Manga</button>
+        <button id="md-toggle" class="ctrl-btn active" onclick="toggleMarkdown()">MD</button>
+        <button id="edit-btn" class="ctrl-btn" onclick="toggleEdit()">✏️ Edit</button>
+        <button id="save-btn" class="ctrl-btn" style="display:none; background:#28a745;" onclick="saveCorrections()">💾 Save</button>
+        <button id="bookmark-btn" class="ctrl-btn" onclick="toggleBookmark()">⭐</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group" data-id="group-zoom">
+        <span class="drag-handle" title="Drag to move">⋮⋮</span>
+        <button class="ctrl-btn" onclick="adjustImgZoom(-15)">🔍-</button>
+        <input type="text" id="zoom-input" value="100%" style="width: 40px; text-align: center; font-size: 11px; background: transparent; border: none; color: #9aa0a6;">
+        <button class="ctrl-btn" onclick="adjustImgZoom(15)">🔍+</button>
+        <div class="divider"></div>
+        <span style="font-size: 11px; color: #9aa0a6;">Font</span>
+        <input type="range" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group" data-id="group-tools">
+        <span class="drag-handle" title="Drag to move">⋮⋮</span>
+        <button id="lib-btn" class="ctrl-btn" onclick="toggleLibrary()">📚 Library</button>
+        <button id="sidebar-toggle" class="ctrl-btn" onclick="toggleSidebar()">🔍 Search</button>
+        <button id="help-btn" class="ctrl-btn" onclick="toggleHelp()">❓ Help</button>
+        <button id="theme-btn" class="ctrl-btn" onclick="toggleTheme()">☀️</button>
+    </div>
+
+</div>
 
     <script>
         // Tell the Markdown parser to respect single line breaks
@@ -3441,6 +3470,97 @@ function renderLibrary() {
         init(true);
 
         showAIDisclaimer();
+
+        // ==========================================
+        // TOOLBAR DRAG & DROP LOGIC
+        // ==========================================
+        function initToolbarDragAndDrop() {
+            const controls = document.querySelector('.controls');
+            
+            // 1. Load your saved layout from previous sessions
+            const savedOrder = JSON.parse(localStorage.getItem('toolbarOrder'));
+            if (savedOrder) {
+                savedOrder.forEach(id => {
+                    const group = document.querySelector(`.controls-group[data-id="${id}"]`);
+                    if (group) controls.appendChild(group);
+                });
+                reorderDividers();
+            }
+
+            // 2. Setup the mouse behavior
+            const groups = document.querySelectorAll('.controls-group');
+            groups.forEach(group => {
+                const handle = group.querySelector('.drag-handle');
+                if (handle) {
+                    // Only allow dragging if they specifically grab the dots (Prevents glitching inputs)
+                    handle.addEventListener('mousedown', () => group.setAttribute('draggable', 'true'));
+                    handle.addEventListener('mouseup', () => group.removeAttribute('draggable'));
+                    handle.addEventListener('mouseleave', () => group.removeAttribute('draggable'));
+                }
+
+                group.addEventListener('dragstart', (e) => {
+                    group.classList.add('dragging');
+                    e.dataTransfer.setData('text/plain', ''); // Required for Firefox
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                group.addEventListener('dragend', () => {
+                    group.classList.remove('dragging');
+                    group.removeAttribute('draggable');
+                    saveToolbarOrder(); // Save layout when dropped
+                });
+            });
+
+            // 3. Handle live sorting while dragging
+            controls.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const dragging = document.querySelector('.dragging');
+                if (!dragging) return;
+
+                const elements =[...controls.querySelectorAll('.controls-group:not(.dragging)')];
+                const hoveredElement = elements.find(child => {
+                    const box = child.getBoundingClientRect();
+                    return e.clientX >= box.left && e.clientX <= box.right &&
+                           e.clientY >= box.top && e.clientY <= box.bottom;
+                });
+
+                if (hoveredElement) {
+                    const box = hoveredElement.getBoundingClientRect();
+                    const isLeftHalf = e.clientX < box.left + box.width / 2;
+                    if (isLeftHalf) {
+                        controls.insertBefore(dragging, hoveredElement);
+                    } else {
+                        controls.insertBefore(dragging, hoveredElement.nextSibling);
+                    }
+                    reorderDividers();
+                }
+            });
+        }
+
+        // Keeps those grey separation lines perfectly aligned 
+        function reorderDividers() {
+            const controls = document.querySelector('.controls');
+            const oldDividers = controls.querySelectorAll(':scope > .divider');
+            oldDividers.forEach(d => d.remove());
+
+            const groups = [...controls.querySelectorAll('.controls-group')];
+            groups.forEach((group, index) => {
+                if (index < groups.length - 1) {
+                    const divider = document.createElement('div');
+                    divider.className = 'divider';
+                    controls.insertBefore(divider, group.nextSibling);
+                }
+            });
+        }
+
+        function saveToolbarOrder() {
+            const order =[...document.querySelectorAll('.controls-group')].map(g => g.dataset.id);
+            localStorage.setItem('toolbarOrder', JSON.stringify(order));
+        }
+
+        // Initialize!
+        initToolbarDragAndDrop();
+        
     </script>
 </body>
 </html>
