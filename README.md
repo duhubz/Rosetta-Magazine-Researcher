@@ -2,7 +2,7 @@
 
 A fully offline-capable archive viewer with smart search, text formatting, and community catalogs to download magazines along with translations and transcriptions. Designed to seamlessly read scanned PDFs alongside transcribed text, translations, and rich metadata.
 
-If this tool saved you some time and you'd like to support the project, feel free to buy me a beer! 
+If this tool saved you some time and you'd like to support the project, feel free to buy me a beer! Translations and transcriptions cost money to generate so any support is greatly appreciated.
 
 [![Buy me a beer](https://img.shields.io/badge/Buy_Me_A_Beer-f39c12?style=for-the-badge&logo=unapp&logoColor=white)](https://paypal.me/dustinhubbard1)
 
