@@ -49,7 +49,7 @@ Rosetta features a **spatial mapping engine**. If an issue includes a coordinate
 *   **Formatting:** Click the **MD** button to toggle between formatted markdown and raw text.
 *   **Font Size & Theme:** Use the slider at the bottom to adjust text size, and the ☀️ button to switch between Dark and Light mode.
 *   **Bookmarks:** Click the ⭐ button to save your current page. You can add custom tags to your bookmarks to easily filter them in the Bookmarks sidebar tab!
-
+*   **Customizable Toolbar:** Grab the dotted handle (**⋮⋮**) on any section of the bottom toolbar to drag and reorder the controls to your liking. Your custom layout is saved automatically!
 ---
 
 ## 🔍 Search & Library Tips
