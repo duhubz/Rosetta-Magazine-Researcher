@@ -8,40 +8,16 @@ import logging
 import os
 import shutil
 import time
-import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import app.config as cfg
 from app.services import metadata, state, zip_utils
-from app.utils import atomic_write_text, is_allowed_fetch_url, safe_name
+from app.utils import URLBlockedError, atomic_write_text, safe_name, safe_urlopen
 
-
-def _download_url_allowed(url: str) -> tuple[bool, str]:
-    """
-    Decide whether a catalog-provided download URL may be fetched.
-
-    Returns (allowed, reason); `reason` is a short human-readable string
-    ("scheme not http/https" / "host not in allowlist") when blocked.
-
-    http/https is enforced unconditionally. The host allowlist (reusing
-    utils.is_allowed_fetch_url and config security.allowed_fetch_hosts) can
-    be bypassed via security.allow_downloads_from_any_host for users with
-    private mirrors -- but never the scheme check.
-    """
-    try:
-        scheme = urlparse(str(url)).scheme
-    except Exception:
-        return False, "scheme not http/https"
-    if scheme not in ("http", "https"):
-        return False, "scheme not http/https"
-    if cfg.allow_downloads_from_any_host():
-        return True, ""
-    if is_allowed_fetch_url(url):
-        return True, ""
-    return False, "host not in allowlist"
+# Streaming chunk size for downloads (64 KiB); PDFs are never buffered whole.
+_CHUNK_SIZE = 65536
 
 
 def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_type: str) -> bool:
@@ -62,11 +38,6 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
             logging.warning("Skipping malformed %s source entry: %r", file_type, entry)
             continue
 
-        allowed, reason = _download_url_allowed(url)
-        if not allowed:
-            logging.warning("Blocked %s download URL (%s): %s", file_type, reason, url)
-            continue
-
         state.DOWNLOAD_STATE[task_id]["status"] = f"Downloading {file_type}..."
         state.DOWNLOAD_STATE[task_id]["progress"] = 0
 
@@ -75,27 +46,33 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
         busted_url = f"{url}&{cb_param}" if "?" in url else f"{url}?{cb_param}"
 
         try:
-            req = urllib.request.Request(
+            # safe_urlopen validates the initial URL and EVERY redirect hop
+            # (scheme + host allowlist), so an allowlisted mirror can't
+            # redirect us to file:// or an internal host.
+            with safe_urlopen(
                 busted_url,
-                headers={
-                    "User-Agent": "RosettaResearcher/1.0",
-                    "Cache-Control": "no-cache",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=timeout) as response:
+                timeout=timeout,
+                allow_any_host=cfg.allow_downloads_from_any_host(),
+                headers={"Cache-Control": "no-cache"},
+            ) as response:
                 total_size = int(response.headers.get("Content-Length", 0))
                 with open(out_path, "wb") as f:
                     downloaded = 0
                     while True:
                         if state.SHUTDOWN_EVENT.is_set():
                             raise RuntimeError("Server is shutting down")
-                        chunk = response.read(16384)
+                        chunk = response.read(_CHUNK_SIZE)
                         if not chunk: break
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total_size:
                             state.DOWNLOAD_STATE[task_id]["progress"] = int((downloaded / total_size) * 100)
             return True
+        except URLBlockedError as e:
+            # Blocked initial URL or redirect hop: skip this mirror, try next.
+            logging.warning("Blocked %s download URL (%s): %s", file_type, e.reason, e.url)
+            if out_path.exists(): out_path.unlink()
+            continue
         except Exception:
             if out_path.exists(): out_path.unlink()
             if state.SHUTDOWN_EVENT.is_set(): break

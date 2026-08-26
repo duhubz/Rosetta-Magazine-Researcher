@@ -7,7 +7,6 @@ tried), and a fully-blocked waterfall ends in a clear error state.
 
 import io
 import logging
-import urllib.request
 
 import pytest
 
@@ -36,14 +35,15 @@ class _FakeResponse:
 
 @pytest.fixture
 def fetched_urls(monkeypatch):
-    """Mock urllib.request.urlopen; record every URL actually fetched."""
+    """Mock the single-hop opener (app.utils._open_no_redirect, used by
+    safe_urlopen); record every URL actually fetched."""
     urls: list[str] = []
 
-    def fake_urlopen(req, timeout=None):
+    def fake_open(req, timeout=None):
         urls.append(req.full_url if hasattr(req, "full_url") else str(req))
         return _FakeResponse()
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("app.utils._open_no_redirect", fake_open)
     return urls
 
 
