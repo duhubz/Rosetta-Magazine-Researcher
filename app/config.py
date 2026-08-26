@@ -26,8 +26,9 @@ else:
 
 _config: Optional[dict[str, Any]] = None
 
-# Hosts the backend is allowed to fetch from (catalogs, covers).
-# Overridable via config.yaml: security.allowed_fetch_hosts
+# Hosts the backend is allowed to fetch from (catalogs, covers, and
+# magazine/data-ZIP download sources). Overridable via config.yaml:
+# security.allowed_fetch_hosts
 DEFAULT_ALLOWED_FETCH_HOSTS = [
     "gamingalexandria.com",
     "www.gamingalexandria.com",
@@ -70,6 +71,7 @@ def _default_config() -> dict[str, Any]:
         },
         "security": {
             "allowed_fetch_hosts": list(DEFAULT_ALLOWED_FETCH_HOSTS),
+            "allow_downloads_from_any_host": False,
         },
     }
 
@@ -123,3 +125,10 @@ def pdf_cache_max_open_documents() -> int: return int(get_config().get("pdf_cach
 def allowed_fetch_hosts() -> list[str]:
     hosts = get_config().get("security", {}).get("allowed_fetch_hosts")
     return list(hosts) if hosts else list(DEFAULT_ALLOWED_FETCH_HOSTS)
+def allow_downloads_from_any_host() -> bool:
+    """Advanced opt-out: skip the host allowlist for magazine/ZIP downloads.
+
+    Only affects pdf_sources/zip_sources fetches; schemes other than
+    http/https are always rejected regardless of this flag.
+    """
+    return bool(get_config().get("security", {}).get("allow_downloads_from_any_host", False))

@@ -4,6 +4,7 @@ Handles background downloading of PDFs and Data ZIPs from community catalogs.
 Features a "waterfall" download system to try multiple mirror URLs.
 """
 
+import logging
 import os
 import shutil
 import time
@@ -11,10 +12,37 @@ import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import app.config as cfg
 from app.services import metadata, state, zip_utils
-from app.utils import atomic_write_text, safe_name
+from app.utils import atomic_write_text, is_allowed_fetch_url, safe_name
+
+
+def _download_url_allowed(url: str) -> tuple[bool, str]:
+    """
+    Decide whether a catalog-provided download URL may be fetched.
+
+    Returns (allowed, reason); `reason` is a short human-readable string
+    ("scheme not http/https" / "host not in allowlist") when blocked.
+
+    http/https is enforced unconditionally. The host allowlist (reusing
+    utils.is_allowed_fetch_url and config security.allowed_fetch_hosts) can
+    be bypassed via security.allow_downloads_from_any_host for users with
+    private mirrors -- but never the scheme check.
+    """
+    try:
+        scheme = urlparse(str(url)).scheme
+    except Exception:
+        return False, "scheme not http/https"
+    if scheme not in ("http", "https"):
+        return False, "scheme not http/https"
+    if cfg.allow_downloads_from_any_host():
+        return True, ""
+    if is_allowed_fetch_url(url):
+        return True, ""
+    return False, "host not in allowlist"
+
 
 def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_type: str) -> bool:
     """
@@ -26,7 +54,19 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
         return True
         
     timeout = cfg.download_timeout()
-    for url in sources:
+    for entry in sources:
+        # Sources are normally plain URL strings, but tolerate per-source
+        # dict shapes like {"url": ...} from community catalogs.
+        url = entry.get("url") if isinstance(entry, dict) else entry
+        if not url or not isinstance(url, str):
+            logging.warning("Skipping malformed %s source entry: %r", file_type, entry)
+            continue
+
+        allowed, reason = _download_url_allowed(url)
+        if not allowed:
+            logging.warning("Blocked %s download URL (%s): %s", file_type, reason, url)
+            continue
+
         state.DOWNLOAD_STATE[task_id]["status"] = f"Downloading {file_type}..."
         state.DOWNLOAD_STATE[task_id]["progress"] = 0
 
@@ -61,7 +101,9 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
             if state.SHUTDOWN_EVENT.is_set(): break
             continue
             
-    state.DOWNLOAD_STATE[task_id]["error"] = f"All {file_type} mirrors failed."
+    state.DOWNLOAD_STATE[task_id]["error"] = (
+        f"All {file_type} download sources were blocked or failed."
+    )
     return False
 
 def download_worker(task_id: str, item: dict[str, Any]) -> None:
