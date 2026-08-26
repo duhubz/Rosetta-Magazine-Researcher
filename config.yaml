@@ -34,10 +34,21 @@ heartbeat:
   check_interval_seconds: 5
 
 security:
-  # Hosts the app is allowed to fetch catalogs/covers from (http/https only).
+  # Hosts the app is allowed to fetch from (http/https only). This one list
+  # gates catalog refreshes, cover images, AND magazine download sources
+  # (every pdf_sources / zip_sources URL in a catalog entry).
   # Entries starting with "*." match any subdomain.
+  # To trust an additional download mirror, add its hostname here, e.g.:
+  #   - mirror.example.org
   allowed_fetch_hosts:
     - gamingalexandria.com
     - www.gamingalexandria.com
     - archive.org
     - "*.archive.org"
+  # Advanced / trusted-catalog-only: when true, magazine/data-ZIP downloads
+  # (pdf_sources / zip_sources) may fetch from ANY http/https host, skipping
+  # the allowlist above. Non-http(s) schemes (file:, javascript:, ...) are
+  # ALWAYS rejected. Intended for users with private archive.org mirrors in
+  # network-restricted environments; leave false unless you fully trust
+  # every catalog you have installed.
+  allow_downloads_from_any_host: false
