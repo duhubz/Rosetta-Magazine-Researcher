@@ -1,4 +1,7 @@
 Flask>=3.0,<4
-PyMuPDF>=1.24
+# PyMuPDF pinned to the 1.24.x series: MuPDF has a history of parser CVEs and an
+# unbounded upper range lets a bad/major release ship silently. Dependabot can
+# still bump within 1.24.x; bumping past 1.25 requires a deliberate PR.
+PyMuPDF>=1.24.13,<1.25
 certifi
 PyYAML>=6.0
