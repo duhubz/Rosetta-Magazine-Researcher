@@ -5,6 +5,11 @@
 // Tell the Markdown parser to respect single line breaks natively
 marked.use({ breaks: true });
 
+// Per-launch session token (see app/__init__.py). Sent on all non-GET
+// requests via the X-Rosetta-Token header (CSRF defense).
+const ROSETTA_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+const TOKEN_HEADERS = { 'X-Rosetta-Token': ROSETTA_TOKEN };
+
 // ==========================================
 // --- 1. GLOBALS & STATE MANAGEMENT ---
 // ==========================================
@@ -363,7 +368,7 @@ async function saveCorrections() {
     btn.innerText = "Saving...";
     
     try {
-        const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+        const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS}, body: JSON.stringify(payload) });
         if(res.ok) { 
             btn.innerText = "✅ Saved!"; 
             setTimeout(() => btn.innerText = "💾 Save", 2000);
@@ -771,7 +776,7 @@ function renderBookmarks() {
     });
 }
 
-async function deleteBookmark(key, e) { e.stopPropagation(); await fetch(`/api/bookmarks?key=${encodeURIComponent(key)}`, { method: 'DELETE' }); fetchBookmarks(); }
+async function deleteBookmark(key, e) { e.stopPropagation(); await fetch(`/api/bookmarks?key=${encodeURIComponent(key)}`, { method: 'DELETE', headers: TOKEN_HEADERS }); fetchBookmarks(); }
 
 function getCurrentBookmarkKey() {
     if (!magSelect.value || !pageInput.value) return "";
@@ -804,7 +809,7 @@ async function applyBookmarkModal() {
     if (!magSelect.value) return;
     const tags = document.getElementById('bookmark-tags-input').value;
     await fetch('/api/bookmarks', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
+        method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
         body: JSON.stringify({ mag: magSelect.value, page: pageInput.value, tags })
     });
     closeBookmarkModal();
@@ -1159,7 +1164,7 @@ async function uninstallIssue(pdf_filename) {
         onConfirm: async () => {
             document.getElementById('modal-action-area').innerHTML = `<div style="color:#ff4d4d; font-weight:bold; text-align:center;">🗑️ Uninstalling...</div>`;
             await fetch('/api/uninstall', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
                 body: JSON.stringify({pdf_filename: pdf_filename})
             });
             closeModal();
@@ -1178,7 +1183,7 @@ async function updateAllIssues() {
             document.getElementById('lib-update-all-btn').disabled = true;
             for (let id of itemsWithUpdates) {
                 completedDownloads.delete(id);
-                await fetch(`/api/download`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id}) });
+                await fetch(`/api/download`, { method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS}, body: JSON.stringify({id: id}) });
                 await new Promise(r => setTimeout(r, 500)); // Stagger slightly
             }
         }
@@ -1195,7 +1200,7 @@ async function startDownload(id, actionAreaElement) {
         </div>
     `;
     await fetch(`/api/download`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
+        method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
         body: JSON.stringify({id: id})
     });
     renderLibrary(); 

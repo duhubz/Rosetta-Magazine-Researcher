@@ -11,11 +11,12 @@ import webbrowser
 from pathlib import Path
 
 import certifi
-from flask import Flask
+from flask import Flask, jsonify, request
 from werkzeug.serving import is_running_from_reloader
 
 from app import config as cfg
 from app.routes import api, pages
+from app.services import state
 
 # --- Global Logging Configuration ---
 # MAC FIX: When running as a .app bundle, sys.stdout might be None. 
@@ -57,7 +58,35 @@ def create_app() -> Flask:
     # Register blueprints
     app.register_blueprint(pages.bp)
     app.register_blueprint(api.bp, url_prefix="/api")
-    
+
+    # Expose the per-launch session token to templates (index.html meta tag)
+    @app.context_processor
+    def inject_session_token() -> dict:
+        return {"rosetta_token": state.SESSION_TOKEN}
+
+    # CSRF / DNS-rebinding defense for state-changing requests.
+    port = cfg.server_port()
+    allowed_hosts = {
+        f"127.0.0.1:{port}", f"localhost:{port}", "127.0.0.1", "localhost",
+    }
+
+    @app.before_request
+    def check_request_security():
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        # Reject requests whose Host header isn't the local server
+        # (blocks DNS-rebinding attacks against the localhost API).
+        if (request.host or "").lower() not in allowed_hosts:
+            return jsonify({"error": "Forbidden", "detail": "Invalid Host header."}), 403
+        # /api/ping is whitelisted from the token requirement so
+        # navigator.sendBeacon (which cannot set headers) can reach it.
+        if request.path == "/api/ping":
+            return None
+        token = request.headers.get("X-Rosetta-Token", "")
+        if not token or token != state.SESSION_TOKEN:
+            return jsonify({"error": "Forbidden", "detail": "Missing or invalid session token."}), 403
+        return None
+
     return app
 
 def run_app() -> None:

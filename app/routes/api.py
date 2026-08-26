@@ -34,9 +34,13 @@ def add_header(response: Response) -> Response:
     response.headers["Expires"] = "0"
     return response
 
-@bp.route("/ping")
+@bp.route("/ping", methods=["GET", "POST"])
 def ping() -> str:
-    """Heartbeat endpoint to keep the server alive while the browser tab is open."""
+    """Heartbeat endpoint to keep the server alive while the browser tab is open.
+
+    Accepts POST (without the session token) so navigator.sendBeacon can
+    deliver a final heartbeat on pagehide.
+    """
     state.LAST_PING = time.time()
     return "ok"
 

@@ -5,6 +5,7 @@ Includes the metadata cache, download progress tracking, and the idle-shutdown m
 """
 
 import os
+import secrets
 import threading
 import time
 from typing import Any, Optional
@@ -12,6 +13,10 @@ from typing import Any, Optional
 import app.config as cfg
 
 # --- Global Caches & Tracking ---
+
+# Per-launch session token. The UI reads it from a meta tag and echoes it
+# back in the X-Rosetta-Token header on all non-GET requests (CSRF defense).
+SESSION_TOKEN: str = secrets.token_urlsafe(32)
 
 # Stores parsed metadata for all local PDFs. Key: relative path, Value: dict of fields.
 METADATA_CACHE: dict[str, dict[str, str]] = {}
