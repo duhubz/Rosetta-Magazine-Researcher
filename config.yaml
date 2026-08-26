@@ -22,6 +22,13 @@ download:
   catalog_fetch_timeout: 10
   cover_fetch_timeout: 5
 
+search:
+  index_file: .rosetta_index.db   # SQLite FTS5 index, stored inside the data_dir
+  rebuild_on_startup: false       # if true, ignore incremental logic and full-rebuild
+
+pdf_cache:
+  max_open_documents: 2  # LRU size for open PDF handles (per-document locking)
+
 heartbeat:
   shutdown_after_idle_seconds: 180  # Auto-exit after no browser heartbeat for this long
   check_interval_seconds: 5

@@ -61,6 +61,13 @@ def _default_config() -> dict[str, Any]:
             "shutdown_after_idle_seconds": 180,
             "check_interval_seconds": 5,
         },
+        "search": {
+            "index_file": ".rosetta_index.db",
+            "rebuild_on_startup": False,
+        },
+        "pdf_cache": {
+            "max_open_documents": 2,
+        },
         "security": {
             "allowed_fetch_hosts": list(DEFAULT_ALLOWED_FETCH_HOSTS),
         },
@@ -110,6 +117,9 @@ def catalog_fetch_timeout() -> int: return int(get_config().get("download", {}).
 def cover_fetch_timeout() -> int: return int(get_config().get("download", {}).get("cover_fetch_timeout", 5))
 def heartbeat_shutdown_seconds() -> int: return int(get_config().get("heartbeat", {}).get("shutdown_after_idle_seconds", 180))
 def heartbeat_check_interval() -> int: return int(get_config().get("heartbeat", {}).get("check_interval_seconds", 5))
+def search_index_file() -> str: return str(get_config().get("search", {}).get("index_file", ".rosetta_index.db"))
+def search_rebuild_on_startup() -> bool: return bool(get_config().get("search", {}).get("rebuild_on_startup", False))
+def pdf_cache_max_open_documents() -> int: return int(get_config().get("pdf_cache", {}).get("max_open_documents", 2))
 def allowed_fetch_hosts() -> list[str]:
     hosts = get_config().get("security", {}).get("allowed_fetch_hosts")
     return list(hosts) if hosts else list(DEFAULT_ALLOWED_FETCH_HOSTS)
