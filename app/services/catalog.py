@@ -9,6 +9,7 @@ import urllib.request
 from typing import Any
 
 import app.config as cfg
+from app.utils import atomic_write_text, is_allowed_fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
     if force_refresh and catalog_urls:
         for url in (catalog_urls if isinstance(catalog_urls, list) else [catalog_urls]):
             if not url: continue
+            if not is_allowed_fetch_url(url):
+                logger.warning(f"Blocked catalog URL (scheme/host not allowed): {url}")
+                continue
             try:
                 req = urllib.request.Request(url, headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -42,7 +46,7 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
                     catalogs.extend(items)
                     official_loaded = True
                     # Update local cache
-                    catalog_file.write_text(raw_data, encoding="utf-8")
+                    atomic_write_text(catalog_file, raw_data)
                     break
             except Exception as e:
                 logger.warning(f"Could not refresh official catalog from {url}: {e}")
@@ -63,13 +67,18 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
             c_data = json.loads(c_file.read_text(encoding="utf-8"))
             # Auto-update community catalogs if update_url is present
             if force_refresh and isinstance(c_data, dict) and "update_url" in c_data:
-                try:
-                    req = urllib.request.Request(c_data["update_url"], headers=headers)
-                    with urllib.request.urlopen(req, timeout=timeout) as r:
-                        new_data = json.loads(r.read().decode("utf-8"))
-                        c_file.write_text(json.dumps(new_data, indent=4), encoding="utf-8")
-                        c_data = new_data
-                except Exception: pass
+                if not is_allowed_fetch_url(c_data["update_url"]):
+                    logger.warning(
+                        f"Blocked update_url in {c_file.name} (scheme/host not allowed): {c_data['update_url']}"
+                    )
+                else:
+                    try:
+                        req = urllib.request.Request(c_data["update_url"], headers=headers)
+                        with urllib.request.urlopen(req, timeout=timeout) as r:
+                            new_data = json.loads(r.read().decode("utf-8"))
+                            atomic_write_text(c_file, json.dumps(new_data, indent=4))
+                            c_data = new_data
+                    except Exception: pass
 
             items = c_data.get("items", c_data) if isinstance(c_data, dict) else c_data
             catalogs.extend(items)

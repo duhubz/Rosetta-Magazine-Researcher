@@ -21,7 +21,7 @@ from flask import Blueprint, Response, jsonify, request, send_file
 import app.config as cfg
 from app.services import catalog, download, metadata, search as search_svc, state
 from app.services import zip_utils
-from app.utils import get_safe_path
+from app.utils import atomic_write_bytes, atomic_write_text, get_safe_path, is_allowed_fetch_url
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("api", __name__)
@@ -280,6 +280,9 @@ def get_cover(item_id: str) -> Response:
     item = next((i for i in catalogs if str(i.get("id")) == item_id), None)
 
     if item and item.get("cover_url"):
+        if not is_allowed_fetch_url(item["cover_url"]):
+            logger.warning(f"Blocked cover URL for {item_id} (scheme/host not allowed): {item['cover_url']}")
+            return _fallback_cover_svg()
         try:
             req = urllib.request.Request(item["cover_url"], headers={"User-Agent": "RosettaResearcher/1.0"})
             with urllib.request.urlopen(req, timeout=cfg.cover_fetch_timeout()) as response:
@@ -288,12 +291,16 @@ def get_cover(item_id: str) -> Response:
                 for old in covers_dir.glob(f"{safe_id}_v*.cache"):
                     try: old.unlink()
                     except Exception: pass
-                cache_path.write_bytes(img_data)
+                atomic_write_bytes(cache_path, img_data)
                 return send_file(io.BytesIO(img_data), mimetype="image/jpeg")
         except Exception as e:
             logger.warning(f"Could not download cover for {item_id}: {e}")
 
     # 3. Fallback SVG
+    return _fallback_cover_svg()
+
+def _fallback_cover_svg() -> Response:
+    """Placeholder cover art returned when no cover can be served."""
     svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="#222"/><text x="50%" y="50%" fill="#666" font-family="sans-serif" font-size="14" text-anchor="middle">No Cover Art</text></svg>'
     return Response(svg, mimetype="image/svg+xml")
 
