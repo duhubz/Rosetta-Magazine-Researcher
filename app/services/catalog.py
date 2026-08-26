@@ -6,12 +6,11 @@ Handles loading and merging magazine lists from official and community sources.
 import json
 import logging
 import threading
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 import app.config as cfg
-from app.utils import atomic_write_text, is_allowed_fetch_url
+from app.utils import URLBlockedError, atomic_write_text, safe_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -109,14 +108,13 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
     # 1. Main Official Catalog
     official_loaded = False
     if force_refresh and catalog_urls:
-        for url in (catalog_urls if isinstance(catalog_urls, list) else [catalog_urls]):
-            if not url: continue
-            if not is_allowed_fetch_url(url):
-                logger.warning(f"Blocked catalog URL (scheme/host not allowed): {url}")
+        for url in catalog_urls if isinstance(catalog_urls, list) else [catalog_urls]:
+            if not url:
                 continue
             try:
-                req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=timeout) as r:
+                # safe_urlopen validates the URL and every redirect hop
+                # against the scheme/host allowlist.
+                with safe_urlopen(url, timeout=timeout, headers=headers) as r:
                     raw_data = r.read().decode("utf-8")
                     items = _parse_catalog_text(raw_data)
                     catalogs.extend(items)
@@ -125,6 +123,8 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
                     atomic_write_text(catalog_file, raw_data)
                     _store_parsed(catalog_file, items)
                     break
+            except URLBlockedError as e:
+                logger.warning(f"Blocked catalog URL ({e.reason}): {e.url}")
             except Exception as e:
                 logger.warning(f"Could not refresh official catalog from {url}: {e}")
 
@@ -151,19 +151,18 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
                 except Exception:
                     c_data = None
                 if isinstance(c_data, dict) and "update_url" in c_data:
-                    if not is_allowed_fetch_url(c_data["update_url"]):
-                        logger.warning(
-                            f"Blocked update_url in {c_file.name} (scheme/host not allowed): {c_data['update_url']}"
-                        )
-                    else:
-                        try:
-                            req = urllib.request.Request(c_data["update_url"], headers=headers)
-                            with urllib.request.urlopen(req, timeout=timeout) as r:
-                                new_raw = r.read().decode("utf-8")
-                                new_data = json.loads(new_raw)
-                                atomic_write_text(c_file, json.dumps(new_data, indent=4))
-                                _store_parsed(c_file, _parse_catalog_text(json.dumps(new_data)))
-                        except Exception: pass
+                    try:
+                        with safe_urlopen(
+                            c_data["update_url"], timeout=timeout, headers=headers
+                        ) as r:
+                            new_raw = r.read().decode("utf-8")
+                            new_data = json.loads(new_raw)
+                            atomic_write_text(c_file, json.dumps(new_data, indent=4))
+                            _store_parsed(c_file, _parse_catalog_text(json.dumps(new_data)))
+                    except URLBlockedError as e:
+                        logger.warning(f"Blocked update_url in {c_file.name} ({e.reason}): {e.url}")
+                    except Exception:
+                        pass
 
             catalogs.extend(_load_catalog_file(c_file))
         except Exception as e:

@@ -6,20 +6,21 @@ Handles parsing, caching, and retrieval of magazine metadata and transcription t
 import re
 import zipfile
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any
 
 import app.config as cfg
 from app.services import state
 from app.services.text_utils import split_pages
 from app.utils import has_hidden_component
 
+
 def parse_metadata(text: str) -> dict[str, str]:
     """
     Parses a key-value text file (metadata.txt) into a dictionary.
-    
+
     Args:
         text: The raw content of a metadata file.
-        
+
     Returns:
         dict: Mapped metadata fields (e.g., {'name': 'Game Mag', 'version': '1.0'})
     """
@@ -47,28 +48,30 @@ def parse_metadata(text: str) -> dict[str, str]:
                 meta[mapping[clean_key]] = val.strip()
     return meta
 
+
 def get_pages_from_master(file_text: str) -> dict[int, str]:
     """
     Splits a master transcription file (_COMPLETE.txt) into individual pages.
-    
+
     Format expected: [[PAGE_001]] content... [[PAGE_002]] content...
-    
+
     Args:
         file_text: The full text of a _COMPLETE.txt file.
-        
+
     Returns:
         dict: A mapping of {page_number: content_string}
     """
     # Delegates to the shared page-splitting helper (single source of truth).
     return split_pages(file_text)
 
-def get_partner_zip(pdf_rel_path: str) -> Optional[Path]:
+
+def get_partner_zip(pdf_rel_path: str) -> Path | None:
     """
     Locates the associated ZIP file containing data for a given PDF.
-    
+
     Args:
         pdf_rel_path: The relative path to the PDF from the Magazines folder.
-        
+
     Returns:
         Path or None: The path to the ZIP file if found.
     """
@@ -76,19 +79,20 @@ def get_partner_zip(pdf_rel_path: str) -> Optional[Path]:
     pdf_path = data_dir / pdf_rel_path
     if not pdf_path.exists():
         return None
-    
+
     # Priority 1: Exact match (MyMag.pdf -> MyMag.zip)
     direct_zip = pdf_path.with_suffix(".zip")
     if direct_zip.exists():
         return direct_zip
-        
+
     # Priority 2: Single ZIP in the same folder
     if pdf_path.parent != data_dir:
         zips_in_folder = list(pdf_path.parent.glob("*.zip"))
         if len(zips_in_folder) == 1:
             return zips_in_folder[0]
-            
+
     return None
+
 
 def load_metadata_cache() -> None:
     """
@@ -112,7 +116,10 @@ def load_metadata_cache() -> None:
         if partner_zip:
             try:
                 with zipfile.ZipFile(partner_zip, "r") as z:
-                    meta_file = next((n for n in z.namelist() if n.split("/")[-1].lower() == "metadata.txt"), None)
+                    meta_file = next(
+                        (n for n in z.namelist() if n.split("/")[-1].lower() == "metadata.txt"),
+                        None,
+                    )
                     if meta_file:
                         meta = parse_metadata(z.read(meta_file).decode("utf-8", errors="ignore"))
             except Exception:
@@ -133,14 +140,15 @@ def load_metadata_cache() -> None:
     # whereas clear()+update() would expose a momentarily-empty cache.
     state.METADATA_CACHE = temp_cache
 
-def get_transcription_text(pdf_rel_path: str, page_str: str) -> Optional[str]:
+
+def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
     """
     Retrieves the transcription/translation text for a specific page.
-    
+
     Args:
         pdf_rel_path: Path to the PDF.
         page_str: Page number (usually padded, e.g., '001').
-        
+
     Returns:
         str or None: The raw transcription content.
     """
@@ -154,14 +162,25 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> Optional[str]:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
                 # Check for Master File in ZIP
-                master_zname = next((n for n in z.namelist() if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()), None)
+                master_zname = next(
+                    (
+                        n
+                        for n in z.namelist()
+                        if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()
+                    ),
+                    None,
+                )
                 if master_zname:
-                    pages = get_pages_from_master(z.read(master_zname).decode("utf-8", errors="ignore"))
+                    pages = get_pages_from_master(
+                        z.read(master_zname).decode("utf-8", errors="ignore")
+                    )
                     if p_num_int in pages:
                         return pages[p_num_int]
 
                 # Check for individual page files in ZIP
-                pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p0*{p_num_int}\.txt$", re.IGNORECASE)
+                pattern = re.compile(
+                    rf"^{re.escape(pdf_path.stem)}_p0*{p_num_int}\.txt$", re.IGNORECASE
+                )
                 for zname in z.namelist():
                     if pattern.search(zname.split("/")[-1]):
                         return z.read(zname).decode("utf-8", errors="ignore")

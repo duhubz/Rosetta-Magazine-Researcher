@@ -17,8 +17,8 @@ import collections
 import contextlib
 import logging
 import threading
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Tuple
 
 import fitz  # PyMuPDF
 
@@ -27,7 +27,7 @@ import app.config as cfg
 logger = logging.getLogger(__name__)
 
 _CACHE_LOCK = threading.Lock()
-_CACHE: "collections.OrderedDict[str, Tuple[fitz.Document, threading.Lock]]" = (
+_CACHE: "collections.OrderedDict[str, tuple[fitz.Document, threading.Lock]]" = (
     collections.OrderedDict()
 )
 
@@ -58,7 +58,7 @@ def get_doc(pdf_path: Path) -> Iterator[fitz.Document]:
     key = str(Path(pdf_path).resolve())
 
     while True:
-        evicted: list[Tuple[fitz.Document, threading.Lock]] = []
+        evicted: list[tuple[fitz.Document, threading.Lock]] = []
         with _CACHE_LOCK:
             entry = _CACHE.get(key)
             if entry is None or entry[0].is_closed:

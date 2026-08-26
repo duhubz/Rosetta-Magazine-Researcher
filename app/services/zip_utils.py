@@ -14,7 +14,7 @@ from pathlib import Path
 def update_zip_content(zip_path: Path, filename: str, new_content: str) -> None:
     """
     Updates or adds a single file inside an existing ZIP archive.
-    
+
     To prevent archive corruption, this function:
     1. Creates a temporary ZIP file.
     2. Copies all existing items from the source ZIP to the temp ZIP.
@@ -29,7 +29,7 @@ def update_zip_content(zip_path: Path, filename: str, new_content: str) -> None:
     # Create a temp file in the same directory as the target ZIP
     temp_fd, temp_path = tempfile.mkstemp(dir=zip_path.parent)
     os.close(temp_fd)
-    
+
     try:
         replaced = False
         with zipfile.ZipFile(zip_path, "r") as zin:
@@ -50,7 +50,7 @@ def update_zip_content(zip_path: Path, filename: str, new_content: str) -> None:
         # Brief sleep ensures file handles are fully released on Windows
         time.sleep(0.1)
         os.replace(temp_path, zip_path)
-        
+
     except Exception as e:
         # Cleanup temp file if something went wrong
         if os.path.exists(temp_path):
