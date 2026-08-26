@@ -16,6 +16,20 @@ def get_safe_path(rel_path: str) -> Path:
     return p
 
 
+def has_hidden_component(path: Path, base: Path) -> bool:
+    """
+    True when any component of `path` (relative to `base`) starts with a dot.
+
+    Used to keep dot-directories/files (e.g. '.temp_<id>' in-flight download
+    folders and the '.rosetta_index.db' search index) out of library scans.
+    """
+    try:
+        rel = path.relative_to(base)
+    except ValueError:
+        rel = path
+    return any(part.startswith(".") for part in rel.parts)
+
+
 def safe_name(name: str, default: str = "") -> str:
     """
     Sanitize an untrusted (e.g. catalog-derived) filename or folder name.

@@ -20,8 +20,15 @@ from flask import Blueprint, Response, jsonify, request, send_file
 
 import app.config as cfg
 from app.services import catalog, download, metadata, search as search_svc, state
-from app.services import zip_utils
-from app.utils import atomic_write_bytes, atomic_write_text, get_safe_path, is_allowed_fetch_url
+from app.services import pdf_cache, search_index, zip_utils
+from app.services.text_utils import split_sections
+from app.utils import (
+    atomic_write_bytes,
+    atomic_write_text,
+    get_safe_path,
+    has_hidden_component,
+    is_allowed_fetch_url,
+)
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("api", __name__)
@@ -50,7 +57,11 @@ def list_mags() -> Response:
     data_dir = cfg.data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     metadata.load_metadata_cache()
-    mags = [p.relative_to(data_dir).as_posix() for p in data_dir.rglob("*.pdf")]
+    mags = [
+        p.relative_to(data_dir).as_posix()
+        for p in data_dir.rglob("*.pdf")
+        if not has_hidden_component(p, data_dir)
+    ]
     return jsonify({"files": sorted(mags), "metadata": state.METADATA_CACHE})
 
 @bp.route("/render")
@@ -76,21 +87,17 @@ def render_page() -> Response:
     except ValueError as e:
         return jsonify({"error": "Bad request", "detail": str(e)}), 400
 
-    doc = None
     try:
-        doc = fitz.open(pdf_path)
-        page = doc.load_page(pn)
-        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-        img = pix.tobytes("png")
+        # Cached document handle: held under a per-document lock for the
+        # duration of the render (fitz Documents are not thread-safe).
+        with pdf_cache.get_doc(pdf_path) as doc:
+            page = doc.load_page(pn)
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            img = pix.tobytes("png")
         return send_file(io.BytesIO(img), mimetype="image/png")
     except Exception as e:
         logger.error(f"Render failed for {mag} page {pn}: {e}")
         return jsonify({"error": str(e)}), 500
-    finally:
-        # Always release the document handle, even when load/render fails.
-        if doc is not None:
-            try: doc.close()
-            except Exception: pass
 
 @bp.route("/text")
 def get_text() -> Response:
@@ -109,29 +116,17 @@ def get_text() -> Response:
         return jsonify({"error": "Bad request", "detail": str(e)}), 400
     content = metadata.get_transcription_text(mag_rel_path, pg)
 
-    # Determine total pages for UI constraints
+    # Determine total pages for UI constraints (cached document handle)
     total = 0
     try:
-        doc = fitz.open(pdf_path)
-        total = len(doc)
-        doc.close()
+        with pdf_cache.get_doc(pdf_path) as doc:
+            total = len(doc)
     except Exception: pass
 
     # Split Rosetta format into sections (Transcription, Translation, Summary)
     jp, en, sum_t = "No transcription found.", "", ""
     if content:
-        content = re.sub(r"^#\s?GA-TRANSCRIPTION\s*", "", content, flags=re.IGNORECASE)
-        parts = re.split(r"#\s?GA-TRANSLATION", content, flags=re.IGNORECASE)
-
-        if len(parts) > 1:
-            jp = parts[0].strip()
-            sub = re.split(r"#\s?GA-SUMMARY", parts[1], flags=re.IGNORECASE)
-            en = sub[0].strip()
-            sum_t = sub[1].strip() if len(sub) > 1 else ""
-        else:
-            sub = re.split(r"#\s?GA-SUMMARY", parts[0], flags=re.IGNORECASE)
-            jp = sub[0].strip()
-            sum_t = sub[1].strip() if len(sub) > 1 else ""
+        jp, en, sum_t = split_sections(content)
 
     # Fetch raw metadata for the visual editor
     raw_meta = ""
@@ -259,6 +254,8 @@ def save_text() -> Response:
                 else: atomic_write_text(pdf_path.parent / c_fn, new_c_json)
 
             metadata.load_metadata_cache()
+            # Keep the FTS5 search index in sync with the edited magazine.
+            search_index.index_magazine_path(rel_path)
             logger.info(f"Saved changes for {rel_path} page {page_num}")
             return jsonify({"status": "ok"})
     except Exception as e:
@@ -269,18 +266,22 @@ def save_text() -> Response:
 def search() -> Response:
     """Executes full-text search across all transcriptions using advanced query logic."""
     query = request.args.get("q", "")
-    results, highlight_list = search_svc.search(
-        query=query,
-        scope=request.args.get("scope", "global"),
-        inc_jp=request.args.get("incJp") == "true",
-        inc_en=request.args.get("incEn") == "true",
-        inc_sum=request.args.get("incSum") == "true",
-        current_mag=request.args.get("currentMag", ""),
-        mag_filter=request.args.get("magFilter", "").lower(),
-        date_start=request.args.get("dateStart", ""),
-        date_end=request.args.get("dateEnd", ""),
-        tag_filter=request.args.get("tagFilter", "").lower(),
-    )
+    try:
+        results, highlight_list = search_svc.search(
+            query=query,
+            scope=request.args.get("scope", "global"),
+            inc_jp=request.args.get("incJp") == "true",
+            inc_en=request.args.get("incEn") == "true",
+            inc_sum=request.args.get("incSum") == "true",
+            current_mag=request.args.get("currentMag", ""),
+            mag_filter=request.args.get("magFilter", "").lower(),
+            date_start=request.args.get("dateStart", ""),
+            date_end=request.args.get("dateEnd", ""),
+            tag_filter=request.args.get("tagFilter", "").lower(),
+        )
+    except search_index.IndexUnavailableError as e:
+        logger.warning(f"Search unavailable: {e}")
+        return jsonify({"error": "Search index unavailable", "detail": str(e)}), 503
     return jsonify({"results": results, "terms_to_highlight": highlight_list})
 
 @bp.route("/bookmarks", methods=["GET", "POST", "DELETE"])
@@ -320,9 +321,9 @@ def get_cover(item_id: str) -> Response:
     if cache_path.exists():
         return send_file(cache_path, mimetype="image/jpeg")
 
-    # 2. Look up URL in local catalog (No force refresh here to prevent UI lag)
-    catalogs = catalog.get_all_catalogs(force_refresh=False)
-    item = next((i for i in catalogs if str(i.get("id")) == item_id), None)
+    # 2. Look up URL in the cached by-id catalog index (O(1); no force
+    # refresh here to prevent UI lag)
+    item = catalog.get_catalog_index(force_refresh=False).get(str(item_id))
 
     if item and item.get("cover_url"):
         if not is_allowed_fetch_url(item["cover_url"]):
@@ -388,6 +389,8 @@ def uninstall_mag() -> Response:
     data_dir = cfg.data_dir()
     pdf_path = data_dir / target_rel_path
     try:
+        # Release any cached open handle first (required for os.remove on Windows).
+        pdf_cache.evict(pdf_path)
         partner_zip = metadata.get_partner_zip(target_rel_path)
         if partner_zip and partner_zip.exists(): os.remove(partner_zip)
         for txt in pdf_path.parent.glob(f"{pdf_path.stem}_p*.txt"): os.remove(txt)
@@ -398,6 +401,8 @@ def uninstall_mag() -> Response:
             pdf_path.parent.rmdir()
 
         metadata.load_metadata_cache()
+        # Drop the magazine's pages from the FTS5 search index.
+        search_index.remove_magazine_path(target_rel_path)
         logger.info(f"Uninstalled: {pdf_filename}")
         return jsonify({"status": "uninstalled"})
     except Exception as e:

@@ -173,3 +173,85 @@ def test_bookmarks_roundtrip(client, token_headers, workspace):
     # File on disk is valid JSON (atomic write)
     on_disk = json.loads((workspace / "bookmarks.json").read_text(encoding="utf-8"))
     assert on_disk == {}
+
+
+# --- FTS5 search endpoint + index integration ---------------------------------
+
+def _install_searchable_mag(workspace):
+    from app.services import metadata, search_index
+
+    data_dir = workspace / "Magazines"
+    mag_dir = data_dir / "SearchMag"
+    mag_dir.mkdir(parents=True, exist_ok=True)
+    (mag_dir / "Issue.pdf").write_bytes(b"%PDF-1.4 fake")
+    (mag_dir / "Issue_COMPLETE.txt").write_text(
+        "[[PAGE_001]]\nLegendary shmup interview\n#GA-TRANSLATION\nEnglish text here",
+        encoding="utf-8",
+    )
+    metadata.load_metadata_cache()
+    search_index.init_index()
+    return mag_dir
+
+
+def test_search_endpoint_returns_results_shape(client, workspace):
+    _install_searchable_mag(workspace)
+    res = client.get("/api/search?q=shmup&scope=global&incJp=true&incEn=true&incSum=true")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert set(data) == {"results", "terms_to_highlight"}
+    assert data["terms_to_highlight"] == ["shmup"]
+    assert len(data["results"]) == 1
+    hit = data["results"][0]
+    assert hit["mag"] == "SearchMag/Issue.pdf"
+    assert hit["page"] == 1
+    assert "<mark>shmup</mark>" in hit["snippet"]
+
+
+def test_search_endpoint_no_match_is_empty_200(client, workspace):
+    _install_searchable_mag(workspace)
+    res = client.get("/api/search?q=nonexistentword&scope=global&incJp=true&incEn=true&incSum=true")
+    assert res.status_code == 200
+    assert res.get_json()["results"] == []
+
+
+def test_search_endpoint_hostile_query_is_200(client, workspace):
+    _install_searchable_mag(workspace)
+    res = client.get(
+        "/api/search?q=%22%20OR%201%3D1%20--&scope=global&incJp=true&incEn=true&incSum=true"
+    )
+    assert res.status_code == 200
+
+
+def test_uninstall_removes_from_search_index(client, token_headers, workspace):
+    from app.services import search_index
+
+    _install_searchable_mag(workspace)
+    conn = search_index.get_index()
+    assert conn.execute("SELECT count(*) FROM pages WHERE pdf_path=?",
+                        ("SearchMag/Issue.pdf",)).fetchone()[0] == 1
+
+    res = client.post(
+        "/api/uninstall", json={"pdf_filename": "Issue.pdf"}, headers=token_headers
+    )
+    assert res.status_code == 200
+    conn = search_index.get_index()
+    assert conn.execute("SELECT count(*) FROM pages WHERE pdf_path=?",
+                        ("SearchMag/Issue.pdf",)).fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM index_meta WHERE pdf_path=?",
+                        ("SearchMag/Issue.pdf",)).fetchone()[0] == 0
+
+
+def test_save_reindexes_magazine(client, token_headers, workspace):
+    from app.services import search_index
+
+    _install_searchable_mag(workspace)
+    res = client.post(
+        "/api/save",
+        json={"mag": "SearchMag/Issue.pdf", "page": 1,
+              "jp": "Fresh gradius strategy", "en": "translated", "sum": ""},
+        headers=token_headers,
+    )
+    assert res.status_code == 200
+    res = client.get("/api/search?q=gradius&scope=global&incJp=true&incEn=true&incSum=true")
+    hits = res.get_json()["results"]
+    assert len(hits) == 1 and hits[0]["page"] == 1

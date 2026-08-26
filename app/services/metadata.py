@@ -10,6 +10,8 @@ from typing import Optional, Any
 
 import app.config as cfg
 from app.services import state
+from app.services.text_utils import split_pages
+from app.utils import has_hidden_component
 
 def parse_metadata(text: str) -> dict[str, str]:
     """
@@ -57,17 +59,8 @@ def get_pages_from_master(file_text: str) -> dict[int, str]:
     Returns:
         dict: A mapping of {page_number: content_string}
     """
-    pages: dict[int, str] = {}
-    # Regex splits by the [[PAGE_XXX]] tag and captures the number
-    parts = re.split(r"\[\[PAGE_(\d+)\]\]", file_text)
-    for i in range(1, len(parts), 2):
-        try:
-            p_num = int(parts[i])
-            content = parts[i + 1].strip()
-            pages[p_num] = content
-        except (IndexError, ValueError):
-            continue
-    return pages
+    # Delegates to the shared page-splitting helper (single source of truth).
+    return split_pages(file_text)
 
 def get_partner_zip(pdf_rel_path: str) -> Optional[Path]:
     """
@@ -107,6 +100,10 @@ def load_metadata_cache() -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
 
     for pdf in data_dir.rglob("*.pdf"):
+        # Skip dot-directories/files: in-flight '.temp_*' downloads and any
+        # other hidden data (e.g. the search index DB) must not enter the library.
+        if has_hidden_component(pdf, data_dir):
+            continue
         rel_path = pdf.relative_to(data_dir).as_posix()
         partner_zip = get_partner_zip(rel_path)
         meta: dict[str, str] = {}
