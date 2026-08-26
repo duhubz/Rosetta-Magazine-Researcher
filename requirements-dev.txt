@@ -1,0 +1,5 @@
+# Dev/CI tooling. Lower bounds pinned so a fresh checkout matches CI:
+# ruff's rule set changes between versions and pytest 8 changed collection
+# behaviour, so floating versions cause "passes locally, fails in CI" drift.
+pytest>=8.0
+ruff>=0.6

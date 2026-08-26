@@ -1,0 +1,26 @@
+# Ruff configuration only — this file does not turn the project into a package.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    "dist",
+    "build",
+    "__pycache__",
+    ".rosetta_index.db*",
+]
+
+[tool.ruff.lint]
+# Baseline opinionated set: pycodestyle errors/warnings, pyflakes, import
+# sorting, bugbear, pyupgrade, simplify. Kept intentionally small so CI
+# catches real problems without a style-enforcement crusade.
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+# E501: line length is handled by the formatter; don't double-report it.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow `assert False`-style idioms in tests.
+"tests/**" = ["B011"]
+
+[tool.ruff.format]
+quote-style = "double"
