@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import app.config as cfg  # noqa: E402
-from app.services import state  # noqa: E402
+from app.services import catalog, pdf_cache, search_index, state  # noqa: E402
 
 
 @pytest.fixture
@@ -35,16 +35,29 @@ def workspace(tmp_path, monkeypatch):
     return tmp_path
 
 
+def _reset_caches():
+    """Reset all module-level caches/singletons (search index, PDF LRU, catalogs)."""
+    search_index.close_index()
+    pdf_cache.close_all()
+    with catalog._CACHE_LOCK:
+        catalog._CATALOG_CACHE.clear()
+        catalog._BY_ID = {}
+        catalog._by_id_version = -1
+        catalog._cache_version = 0
+
+
 @pytest.fixture(autouse=True)
 def clean_state():
     """Reset global mutable state around every test."""
     state.METADATA_CACHE = {}
     state.DOWNLOAD_STATE.clear()
     state.SHUTDOWN_EVENT.clear()
+    _reset_caches()
     yield
     state.METADATA_CACHE = {}
     state.DOWNLOAD_STATE.clear()
     state.SHUTDOWN_EVENT.clear()
+    _reset_caches()
 
 
 @pytest.fixture

@@ -106,6 +106,12 @@ def run_app() -> None:
     if should_run_startup:
         logger.info("Starting Rosetta Magazine Researcher")
         metadata.load_metadata_cache()
+
+        # Bring the FTS5 search index up to date (full rebuild on first
+        # launch / empty index, incremental otherwise). Never fatal: on
+        # failure /api/search reports 503 instead of crashing startup.
+        from app.services import search_index
+        search_index.init_index()
         
         if not dev_mode:
             logger.info("Heartbeat monitor active.")

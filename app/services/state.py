@@ -87,6 +87,14 @@ def start_heartbeat_monitor() -> None:
                 deadline = time.time() + 5.0
                 while writes_in_progress() > 0 and time.time() < deadline:
                     time.sleep(0.1)
+                # Release cached resources before the hard exit: open PDF
+                # handles and the search-index SQLite connection (flushes WAL).
+                try:
+                    from app.services import pdf_cache, search_index
+                    pdf_cache.close_all()
+                    search_index.close_index()
+                except Exception:
+                    pass
                 # Use os._exit(0) to ensure the entire process tree closes.
                 os._exit(0)
 

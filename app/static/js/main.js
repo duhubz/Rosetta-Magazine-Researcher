@@ -648,13 +648,22 @@ async function executeSearch() {
 
     data.results.forEach(r => {
         const div = document.createElement('div'); div.className = 'result-item';
-        // Escape first, then highlight on the escaped text so <mark> survives.
-        let snip = escapeHtml(r.snippet);
-        data.terms_to_highlight.forEach(t => {
-            const escapedTerm = escapeHtml(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const reHighlight = new RegExp(`(${escapedTerm})`, 'gi');
-            snip = snip.replace(reHighlight, '<mark>$1</mark>');
-        });
+        let snip;
+        if (r.snippet && r.snippet.includes('<mark>')) {
+            // Server-side FTS5 snippet: escape everything, then restore only
+            // the <mark> delimiters the server inserted around matches.
+            snip = escapeHtml(r.snippet)
+                .split(escapeHtml('<mark>')).join('<mark>')
+                .split(escapeHtml('</mark>')).join('</mark>');
+        } else {
+            // Fallback: client-side highlighting of the escaped snippet.
+            snip = escapeHtml(r.snippet);
+            data.terms_to_highlight.forEach(t => {
+                const escapedTerm = escapeHtml(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const reHighlight = new RegExp(`(${escapedTerm})`, 'gi');
+                snip = snip.replace(reHighlight, '<mark>$1</mark>');
+            });
+        }
         const meta = metadataCache[r.mag] || {};
         let resultTitle = meta.name ? meta.name : r.mag.split('/').pop().replace('.pdf', '');
         if (meta.issue_name) resultTitle += ` - ${meta.date} - ${meta.issue_name}`;

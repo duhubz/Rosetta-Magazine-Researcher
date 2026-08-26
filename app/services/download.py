@@ -210,3 +210,8 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     state.DOWNLOAD_STATE[task_id]["status"] = "Complete!"
     state.DOWNLOAD_STATE[task_id]["done"] = True
     metadata.load_metadata_cache()
+
+    # Index the newly installed magazine so it is searchable immediately.
+    from app.services import search_index  # local import: avoids cycle at module load
+    new_rel_path = (final_dir / pdf_filename).relative_to(data_dir).as_posix()
+    search_index.index_magazine_path(new_rel_path)
