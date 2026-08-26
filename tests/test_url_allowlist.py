@@ -2,7 +2,6 @@
 
 import io
 import json
-import urllib.request
 
 import pytest
 
@@ -69,7 +68,7 @@ def test_update_url_blocked_for_non_allowlisted_host(workspace, monkeypatch):
         fetched_urls.append(req.full_url if hasattr(req, "full_url") else str(req))
         return _FakeResponse(b"{}")
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("app.utils._open_no_redirect", fake_urlopen)
     monkeypatch.setattr("app.config.catalog_urls", lambda: [])
 
     items = catalog.get_all_catalogs(force_refresh=True)
@@ -96,7 +95,7 @@ def test_update_url_allowed_host_is_fetched(workspace, monkeypatch):
         fetched_urls.append(req.full_url if hasattr(req, "full_url") else str(req))
         return _FakeResponse(json.dumps(updated).encode("utf-8"))
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("app.utils._open_no_redirect", fake_urlopen)
     monkeypatch.setattr("app.config.catalog_urls", lambda: [])
 
     items = catalog.get_all_catalogs(force_refresh=True)
@@ -113,7 +112,7 @@ def test_official_catalog_url_scheme_blocked(workspace, monkeypatch):
         fetched.append(req)
         return _FakeResponse(b"[]")
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("app.utils._open_no_redirect", fake_urlopen)
     monkeypatch.setattr("app.config.catalog_urls", lambda: ["file:///etc/passwd"])
 
     catalog.get_all_catalogs(force_refresh=True)

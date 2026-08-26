@@ -10,7 +10,6 @@ import os
 import re
 import threading
 import time
-import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -23,11 +22,12 @@ from app.services import catalog, download, metadata, search as search_svc, stat
 from app.services import pdf_cache, search_index, zip_utils
 from app.services.text_utils import split_sections
 from app.utils import (
+    URLBlockedError,
     atomic_write_bytes,
     atomic_write_text,
     get_safe_path,
     has_hidden_component,
-    is_allowed_fetch_url,
+    safe_urlopen,
 )
 
 logger = logging.getLogger(__name__)
@@ -326,12 +326,10 @@ def get_cover(item_id: str) -> Response:
     item = catalog.get_catalog_index(force_refresh=False).get(str(item_id))
 
     if item and item.get("cover_url"):
-        if not is_allowed_fetch_url(item["cover_url"]):
-            logger.warning(f"Blocked cover URL for {item_id} (scheme/host not allowed): {item['cover_url']}")
-            return _fallback_cover_svg()
         try:
-            req = urllib.request.Request(item["cover_url"], headers={"User-Agent": "RosettaResearcher/1.0"})
-            with urllib.request.urlopen(req, timeout=cfg.cover_fetch_timeout()) as response:
+            # safe_urlopen validates the URL and every redirect hop against
+            # the scheme/host allowlist.
+            with safe_urlopen(item["cover_url"], timeout=cfg.cover_fetch_timeout()) as response:
                 img_data = response.read()
                 # Clean old version caches
                 for old in covers_dir.glob(f"{safe_id}_v*.cache"):
@@ -339,6 +337,9 @@ def get_cover(item_id: str) -> Response:
                     except Exception: pass
                 atomic_write_bytes(cache_path, img_data)
                 return send_file(io.BytesIO(img_data), mimetype="image/jpeg")
+        except URLBlockedError as e:
+            logger.warning(f"Blocked cover URL for {item_id} ({e.reason}): {e.url}")
+            return _fallback_cover_svg()
         except Exception as e:
             logger.warning(f"Could not download cover for {item_id}: {e}")
 

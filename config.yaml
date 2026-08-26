@@ -52,3 +52,9 @@ security:
   # network-restricted environments; leave false unless you fully trust
   # every catalog you have installed.
   allow_downloads_from_any_host: false
+  # Maximum number of HTTP redirects followed per outbound fetch. Redirects
+  # are followed manually and EVERY hop (including relative Location headers)
+  # is re-checked against allowed_fetch_hosts and the http/https scheme rule,
+  # so an allowlisted host cannot redirect the app to file:// or an internal
+  # host. Fetches exceeding this many redirects are aborted.
+  max_redirects: 5
