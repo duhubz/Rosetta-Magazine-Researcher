@@ -148,11 +148,12 @@ def search(
         results.append({"mag": mag_rel_path, "page": page_num, "snippet": snippet})
 
     # --- 2. Iterate Library ---
-    for mag_rel_path in state.METADATA_CACHE.keys():
+    # Snapshot the cache: a concurrent reload swaps the global binding,
+    # so iterate a stable local copy.
+    cache_snapshot = list(state.METADATA_CACHE.items())
+    for mag_rel_path, meta in cache_snapshot:
         if scope == "current" and mag_rel_path != current_mag:
             continue
-
-        meta = state.METADATA_CACHE.get(mag_rel_path, {})
 
         # Filter by Magazine Name or Tags
         if mag_filter and mag_filter not in meta.get("name", "").lower():

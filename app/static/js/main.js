@@ -5,6 +5,11 @@
 // Tell the Markdown parser to respect single line breaks natively
 marked.use({ breaks: true });
 
+// Per-launch session token (see app/__init__.py). Sent on all non-GET
+// requests via the X-Rosetta-Token header (CSRF defense).
+const ROSETTA_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+const TOKEN_HEADERS = { 'X-Rosetta-Token': ROSETTA_TOKEN };
+
 // ==========================================
 // --- 1. GLOBALS & STATE MANAGEMENT ---
 // ==========================================
@@ -123,7 +128,11 @@ async function init(forceUpdate = false) {
     Object.values(metadataCache).forEach(meta => { if (meta.name) magSet.add(meta.name); });
     const dlSearch = document.getElementById('mag-datalist');
     dlSearch.innerHTML = '';
-    Array.from(magSet).sort().forEach(m => dlSearch.innerHTML += `<option value="${m}">`);
+    Array.from(magSet).sort().forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        dlSearch.appendChild(opt);
+    });
     
     fetchBookmarks();
     fetchCatalog();
@@ -256,7 +265,7 @@ function renderContent() {
                 safeText = safeText.replace(/^\s*([0-9]+\.)([^\s])/gm, '$1 $2'); 
             }
 
-            el.innerHTML = marked.parse(safeText); 
+            el.innerHTML = DOMPurify.sanitize(marked.parse(safeText)); 
             el.classList.add('markdown-mode'); 
         } else {
             el.innerText = content; 
@@ -359,7 +368,7 @@ async function saveCorrections() {
     btn.innerText = "Saving...";
     
     try {
-        const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+        const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS}, body: JSON.stringify(payload) });
         if(res.ok) { 
             btn.innerText = "✅ Saved!"; 
             setTimeout(() => btn.innerText = "💾 Save", 2000);
@@ -535,6 +544,18 @@ function escapeHtml(value = "") {
     return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/**
+ * Validates an untrusted URL for use in href attributes.
+ * Returns the normalized URL if it uses http(s), otherwise an empty string.
+ */
+function safeUrl(value) {
+    try {
+        const parsed = new URL(String(value || ''), window.location.origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    } catch (e) { /* invalid URL */ }
+    return '';
+}
+
 function renderMetadata(meta, page, filename) {
     const titleEl = document.getElementById('page-title');
     const metaEl = document.getElementById('meta-display');
@@ -544,26 +565,28 @@ function renderMetadata(meta, page, filename) {
     titleEl.innerText = displayTitle + " — Page " + page;
 
     let metaStr =[];
-    if (meta.version) metaStr.push(`<b>Version</b> - <font color="FFFFFF">${meta.version}</font>`);
-    if (meta.date) metaStr.push(`<b>Date</b> - <font color="FFFFFF">${meta.date}</font>`);
-    if (meta.region) metaStr.push(`<b>Region</b> - <font color="FFFFFF">${meta.region}</font>`);
-    if (meta.translation) metaStr.push(`<b>Translation</b> - <font color="FFFFFF">${meta.translation}</font>`);
-    if (meta.publisher) metaStr.push(`<b>Publisher</b> - <font color="FFFFFF">${meta.publisher}</font>`);
+    if (meta.version) metaStr.push(`<b>Version</b> - <font color="FFFFFF">${escapeHtml(meta.version)}</font>`);
+    if (meta.date) metaStr.push(`<b>Date</b> - <font color="FFFFFF">${escapeHtml(meta.date)}</font>`);
+    if (meta.region) metaStr.push(`<b>Region</b> - <font color="FFFFFF">${escapeHtml(meta.region)}</font>`);
+    if (meta.translation) metaStr.push(`<b>Translation</b> - <font color="FFFFFF">${escapeHtml(meta.translation)}</font>`);
+    if (meta.publisher) metaStr.push(`<b>Publisher</b> - <font color="FFFFFF">${escapeHtml(meta.publisher)}</font>`);
     
     let credits =[];
     if (meta.scanner) {
-        let s = meta.scanner_url ? `<a href="${meta.scanner_url}" target="_blank" class="scanner-link">${meta.scanner}</a>` : meta.scanner;
+        const scannerUrl = safeUrl(meta.scanner_url);
+        let s = scannerUrl ? `<a href="${escapeHtml(scannerUrl)}" target="_blank" rel="noopener noreferrer" class="scanner-link">${escapeHtml(meta.scanner)}</a>` : escapeHtml(meta.scanner);
         credits.push(`<b>Scanned by</b> - ${s}`);
     }
     if (meta.editor) {
-        let e = meta.editor_url ? `<a href="${meta.editor_url}" target="_blank" class="scanner-link">${meta.editor}</a>` : meta.editor;
+        const editorUrl = safeUrl(meta.editor_url);
+        let e = editorUrl ? `<a href="${escapeHtml(editorUrl)}" target="_blank" rel="noopener noreferrer" class="scanner-link">${escapeHtml(meta.editor)}</a>` : escapeHtml(meta.editor);
         credits.push(`<b>Edited by</b> - ${e}`);
     }
 
     let finalHtml = metaStr.join(" • ");
     if (credits.length > 0) finalHtml += (finalHtml ? "<br>" : "") + credits.join(" | ");
-    if (meta.tags) finalHtml += `<br><span style="color:#8ab4f8; font-size:12px; font-weight:bold;">Tags - ${meta.tags}</span>`;
-    if (meta.notes) finalHtml += `<br><span style="color:#fde68a; font-size:11px;">Notes - ${meta.notes}</span>`;
+    if (meta.tags) finalHtml += `<br><span style="color:#8ab4f8; font-size:12px; font-weight:bold;">Tags - ${escapeHtml(meta.tags)}</span>`;
+    if (meta.notes) finalHtml += `<br><span style="color:#fde68a; font-size:11px;">Notes - ${escapeHtml(meta.notes)}</span>`;
     
     metaEl.innerHTML = finalHtml;
 }
@@ -625,16 +648,18 @@ async function executeSearch() {
 
     data.results.forEach(r => {
         const div = document.createElement('div'); div.className = 'result-item';
-        let snip = r.snippet;
+        // Escape first, then highlight on the escaped text so <mark> survives.
+        let snip = escapeHtml(r.snippet);
         data.terms_to_highlight.forEach(t => {
-            const reHighlight = new RegExp(`(${t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')})`, 'gi');
+            const escapedTerm = escapeHtml(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const reHighlight = new RegExp(`(${escapedTerm})`, 'gi');
             snip = snip.replace(reHighlight, '<mark>$1</mark>');
         });
         const meta = metadataCache[r.mag] || {};
         let resultTitle = meta.name ? meta.name : r.mag.split('/').pop().replace('.pdf', '');
         if (meta.issue_name) resultTitle += ` - ${meta.date} - ${meta.issue_name}`;
 
-        div.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:11px;">${resultTitle} — P${r.page}</span><br><small>...${snip}...</small>`;
+        div.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:11px;">${escapeHtml(resultTitle)} — P${escapeHtml(r.page)}</span><br><small>...${snip}...</small>`;
         div.onclick = () => { magSelect.value = r.mag; update(r.page, data.terms_to_highlight); };
         container.appendChild(div);
     });
@@ -681,7 +706,7 @@ function triggerSearchHighlight(termsArray) {
 }
 
 function formatSearchDate(input, type) {
-    let val = input.value.trim().split('/').join('-').split('\\\\').join('-');
+    let val = input.value.trim().split('/').join('-').split('\\').join('-');
     if (!val) return;
     
     if (/^\d{8}$/.test(val)) { val = `${val.substring(0,4)}-${val.substring(4,6)}-${val.substring(6,8)}`; }
@@ -740,16 +765,18 @@ function renderBookmarks() {
     list.innerHTML = "";
     Object.entries(bookmarksData).forEach(([key, b]) => {
         const prettyName = b.mag.split('/').pop().replace('.pdf','');
-        if (filter && !b.tags.toLowerCase().includes(filter) && !prettyName.toLowerCase().includes(filter)) return;
+        const tags = b.tags || '';
+        if (filter && !tags.toLowerCase().includes(filter) && !prettyName.toLowerCase().includes(filter)) return;
         const div = document.createElement('div');
         div.className = 'result-item';
-        div.innerHTML = `<b>${prettyName} - P${b.page}</b><br><small style="color:var(--accent)">${b.tags}</small><span class="del-bk" onclick="deleteBookmark('${key}', event)">🗑️</span>`;
+        div.innerHTML = `<b>${escapeHtml(prettyName)} - P${escapeHtml(b.page)}</b><br><small style="color:var(--accent)">${escapeHtml(tags)}</small><span class="del-bk">🗑️</span>`;
         div.onclick = () => { magSelect.value = b.mag; update(b.page); };
+        div.querySelector('.del-bk').addEventListener('click', (e) => deleteBookmark(key, e));
         list.appendChild(div);
     });
 }
 
-async function deleteBookmark(key, e) { e.stopPropagation(); await fetch(`/api/bookmarks?key=${encodeURIComponent(key)}`, { method: 'DELETE' }); fetchBookmarks(); }
+async function deleteBookmark(key, e) { e.stopPropagation(); await fetch(`/api/bookmarks?key=${encodeURIComponent(key)}`, { method: 'DELETE', headers: TOKEN_HEADERS }); fetchBookmarks(); }
 
 function getCurrentBookmarkKey() {
     if (!magSelect.value || !pageInput.value) return "";
@@ -782,7 +809,7 @@ async function applyBookmarkModal() {
     if (!magSelect.value) return;
     const tags = document.getElementById('bookmark-tags-input').value;
     await fetch('/api/bookmarks', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
+        method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
         body: JSON.stringify({ mag: magSelect.value, page: pageInput.value, tags })
     });
     closeBookmarkModal();
@@ -831,7 +858,12 @@ function populateLibraryFilters() {
     Object.entries(sets).forEach(([id, uniqueSet]) => {
         const dl = document.getElementById(id);
         dl.innerHTML = '';
-        Array.from(uniqueSet).sort().forEach(val => { if(val) dl.innerHTML += `<option value="${val}">`; });
+        Array.from(uniqueSet).sort().forEach(val => {
+            if (!val) return;
+            const opt = document.createElement('option');
+            opt.value = val;
+            dl.appendChild(opt);
+        });
     });
 }
 
@@ -847,6 +879,21 @@ function clearLibraryMagazineFilter() {
     syncLibraryMagazineFilterUi();
     filterLibrary();
     input.focus();
+}
+
+/**
+ * Segment-wise version comparison ("1.10" > "1.9", which parseFloat gets
+ * wrong). Missing/non-numeric segments compare as 0. Returns >0, 0, or <0.
+ */
+function compareVersions(a, b) {
+    const pa = String(a ?? '0').split('.').map(s => parseInt(s, 10) || 0);
+    const pb = String(b ?? '0').split('.').map(s => parseInt(s, 10) || 0);
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+        const d = (pa[i] || 0) - (pb[i] || 0);
+        if (d !== 0) return d;
+    }
+    return 0;
 }
 
 function filterLibrary() { renderLibrary(); }
@@ -908,15 +955,14 @@ function renderLibrary() {
     }
 
     catalogData.forEach(item => {
-        const localRelPath = localFiles.find(f => f.endsWith(item.pdf_filename));
+        // Exact basename match — endsWith would let 'game.pdf' match 'Endgame.pdf'
+        const localRelPath = localFiles.find(f => f.split('/').pop() === item.pdf_filename);
         const isDownloaded = !!localRelPath;
         
         let updateAvailable = false;
         if (isDownloaded) {
             const localMeta = metadataCache[localRelPath] || {};
-            const localVer = parseFloat(localMeta.version || 0);
-            const catVer = parseFloat(item.version || 0);
-            if (catVer > localVer) {
+            if (compareVersions(item.version, localMeta.version) > 0) {
                 updateAvailable = true;
                 itemsWithUpdates.push(item.id);
             }
@@ -963,8 +1009,8 @@ function renderLibrary() {
         let origFlag = getFlagEmoji(item.original_language);
         let transFlag = getFlagEmoji(item.translated_language);
         let langDisplay = "";
-        if (origFlag && transFlag) langDisplay = `<span class="flag-box">${origFlag} ➔ ${transFlag}</span>`;
-        else if (origFlag) langDisplay = `<span class="flag-box">${origFlag}</span>`;
+        if (origFlag && transFlag) langDisplay = `<span class="flag-box">${escapeHtml(origFlag)} ➔ ${escapeHtml(transFlag)}</span>`;
+        else if (origFlag) langDisplay = `<span class="flag-box">${escapeHtml(origFlag)}</span>`;
 
         const coverImg = item.cover_url ? `/api/cover/${encodeURIComponent(item.id)}?v=${encodeURIComponent(item.version || '1.0')}` : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="%23222"/><text x="50%" y="50%" fill="%23666" font-family="sans-serif" font-size="14" text-anchor="middle">No Cover Art</text></svg>';
 
@@ -973,10 +1019,10 @@ function renderLibrary() {
         card.onclick = () => openModal(item.id, isDownloaded);
         card.innerHTML = `
             ${badgeHtml}
-            <img class="lib-cover" src="${coverImg}" loading="lazy">
+            <img class="lib-cover" src="${escapeHtml(coverImg)}" loading="lazy">
             <div class="lib-info">
-                <div class="lib-title"><span style="overflow:hidden; text-overflow:ellipsis;">${prettyName}</span> ${langDisplay}</div>
-                <div class="lib-desc">${issueLabel || 'Unknown Issue'}</div>
+                <div class="lib-title"><span style="overflow:hidden; text-overflow:ellipsis;">${escapeHtml(prettyName)}</span> ${langDisplay}</div>
+                <div class="lib-desc">${escapeHtml(issueLabel) || 'Unknown Issue'}</div>
             </div>
         `;
         grid.appendChild(card);
@@ -998,27 +1044,29 @@ function openModal(id, isDownloaded) {
     let origFlag = getFlagEmoji(item.original_language);
     let transFlag = getFlagEmoji(item.translated_language);
     
-    if(item.issue_name) metaHtml += `<b>Issue:</b> ${item.issue_name}`;
-    if(item.date) metaHtml += `<br><b>Date:</b> ${item.date} &nbsp;|&nbsp; `;
-    if(item.version) metaHtml += `<b>Version:</b> ${item.version} &nbsp;|&nbsp; `;
-    if (origFlag && transFlag) metaHtml += `<b>Language:</b> ${origFlag} ➔ ${transFlag} &nbsp;|&nbsp; `;
-    else if (origFlag) metaHtml += `<b>Language:</b> ${origFlag} &nbsp;|&nbsp; `;
+    if(item.issue_name) metaHtml += `<b>Issue:</b> ${escapeHtml(item.issue_name)}`;
+    if(item.date) metaHtml += `<br><b>Date:</b> ${escapeHtml(item.date)} &nbsp;|&nbsp; `;
+    if(item.version) metaHtml += `<b>Version:</b> ${escapeHtml(item.version)} &nbsp;|&nbsp; `;
+    if (origFlag && transFlag) metaHtml += `<b>Language:</b> ${escapeHtml(origFlag)} ➔ ${escapeHtml(transFlag)} &nbsp;|&nbsp; `;
+    else if (origFlag) metaHtml += `<b>Language:</b> ${escapeHtml(origFlag)} &nbsp;|&nbsp; `;
     
     let credits =[];
     if (item.scanner) {
-        let s = item.scanner_url ? `<a href="${item.scanner_url}" target="_blank" style="color:var(--accent); text-decoration:none;">${item.scanner}</a>` : item.scanner;
+        const scannerUrl = safeUrl(item.scanner_url);
+        let s = scannerUrl ? `<a href="${escapeHtml(scannerUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:none;">${escapeHtml(item.scanner)}</a>` : escapeHtml(item.scanner);
         credits.push(`<b>Scanned by:</b> ${s}`);
     }
     if (item.editor) {
-        let e = item.editor_url ? `<a href="${item.editor_url}" target="_blank" style="color:var(--accent); text-decoration:none;">${item.editor}</a>` : item.editor;
+        const editorUrl = safeUrl(item.editor_url);
+        let e = editorUrl ? `<a href="${escapeHtml(editorUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:none;">${escapeHtml(item.editor)}</a>` : escapeHtml(item.editor);
         credits.push(`<b>Edited by:</b> ${e}`);
     }
     if (credits.length > 0) metaHtml += `<br>` + credits.join(" &nbsp;|&nbsp; ");
     
     document.getElementById('modal-meta').innerHTML = metaHtml;
     
-    let descHtml = item.description || "No description provided.";
-    if (item.notes) descHtml += `<br><br><span style="color:#fde68a; font-size:13px;"><b>Notes:</b> ${item.notes}</span>`;
+    let descHtml = escapeHtml(item.description || "No description provided.");
+    if (item.notes) descHtml += `<br><br><span style="color:#fde68a; font-size:13px;"><b>Notes:</b> ${escapeHtml(item.notes)}</span>`;
 
     if (item.adult_content === true) {
         descHtml = `<div style="color: #ff4d4d; font-weight: bold; margin-bottom: 12px; border: 1px solid #ff4d4d; padding: 6px 10px; border-radius: 4px; display: inline-block; background: rgba(255, 77, 77, 0.1);">⚠️ Adult Content 18+ ONLY!!</div><br>` + descHtml;
@@ -1041,22 +1089,40 @@ function openModal(id, isDownloaded) {
         } else if (itemsWithUpdates.includes(item.id)) {
             actionArea.innerHTML = `
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-read" style="flex:1;" onclick="readIssue('${item.pdf_filename}')">📖 Read Old</button>
-                    <button class="btn-dl" style="background:#ff9800; color:#000; flex:1;" onclick="startDownload('${item.id}', this.parentElement)">🔄 Update Now</button>
-                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" onclick="uninstallIssue('${item.pdf_filename}')">🗑️ Uninstall</button>
+                    <button class="btn-read" style="flex:1;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Read Old</button>
+                    <button class="btn-dl" style="background:#ff9800; color:#000; flex:1;" data-action="download" data-id="${escapeHtml(item.id)}">🔄 Update Now</button>
+                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" data-action="uninstall" data-pdf="${escapeHtml(item.pdf_filename || '')}">🗑️ Uninstall</button>
                 </div>
             `;
+            bindActionButtons(actionArea);
         } else if (isDownloaded) {
             actionArea.innerHTML = `
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-read" style="flex:1;" onclick="readIssue('${item.pdf_filename}')">📖 Read Now</button>
-                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" onclick="uninstallIssue('${item.pdf_filename}')">🗑️ Uninstall</button>
+                    <button class="btn-read" style="flex:1;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Read Now</button>
+                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" data-action="uninstall" data-pdf="${escapeHtml(item.pdf_filename || '')}">🗑️ Uninstall</button>
                 </div>
             `;
+            bindActionButtons(actionArea);
         } else {
-            actionArea.innerHTML = `<button class="btn-dl" onclick="startDownload('${item.id}', this.parentElement)">☁️ Download to Library</button>`;
+            actionArea.innerHTML = `<button class="btn-dl" data-action="download" data-id="${escapeHtml(item.id)}">☁️ Download to Library</button>`;
+            bindActionButtons(actionArea);
         }
         document.getElementById('modal-overlay').style.display = 'flex';
+    });
+}
+
+/**
+ * Binds click handlers to generated action buttons (replaces inline onclick,
+ * which would execute attacker-controlled strings from catalog data).
+ */
+function bindActionButtons(container) {
+    container.querySelectorAll('[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            if (action === 'read') readIssue(btn.dataset.pdf);
+            else if (action === 'download') startDownload(btn.dataset.id, btn.parentElement);
+            else if (action === 'uninstall') uninstallIssue(btn.dataset.pdf);
+        });
     });
 }
 
@@ -1112,7 +1178,7 @@ async function uninstallIssue(pdf_filename) {
         onConfirm: async () => {
             document.getElementById('modal-action-area').innerHTML = `<div style="color:#ff4d4d; font-weight:bold; text-align:center;">🗑️ Uninstalling...</div>`;
             await fetch('/api/uninstall', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
                 body: JSON.stringify({pdf_filename: pdf_filename})
             });
             closeModal();
@@ -1131,7 +1197,7 @@ async function updateAllIssues() {
             document.getElementById('lib-update-all-btn').disabled = true;
             for (let id of itemsWithUpdates) {
                 completedDownloads.delete(id);
-                await fetch(`/api/download`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id}) });
+                await fetch(`/api/download`, { method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS}, body: JSON.stringify({id: id}) });
                 await new Promise(r => setTimeout(r, 500)); // Stagger slightly
             }
         }
@@ -1148,7 +1214,7 @@ async function startDownload(id, actionAreaElement) {
         </div>
     `;
     await fetch(`/api/download`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
+        method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
         body: JSON.stringify({id: id})
     });
     renderLibrary(); 
@@ -1193,10 +1259,11 @@ setInterval(async () => {
                         if(actionArea && item && actionArea.innerHTML.includes('dl-bar-mod')) {
                             actionArea.innerHTML = `
                                 <div style="display:flex; gap:10px;">
-                                    <button class="btn-read" style="flex:1;" onclick="readIssue('${item.pdf_filename}')">📖 Download Complete - Read Now</button>
-                                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" onclick="uninstallIssue('${item.pdf_filename}')">🗑️ Uninstall</button>
+                                    <button class="btn-read" style="flex:1;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Download Complete - Read Now</button>
+                                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" data-action="uninstall" data-pdf="${escapeHtml(item.pdf_filename || '')}">🗑️ Uninstall</button>
                                 </div>
                             `;
+                            bindActionButtons(actionArea);
                         }
                     }
                 }
@@ -1214,7 +1281,7 @@ async function readIssue(filename) {
     const actionArea = document.getElementById('modal-action-area');
     actionArea.innerHTML = `<div style="text-align:center; color:var(--accent); font-weight:bold;">🔄 Opening Issue...</div>`;
     await init(); 
-    const match = localFiles.find(f => f.endsWith(filename));
+    const match = localFiles.find(f => f.split('/').pop() === filename);
     
     if (match) {
         magSelect.value = match;
@@ -1625,8 +1692,14 @@ window.addEventListener('mouseup', () => {
 function initToolbarDragAndDrop() {
     const controls = document.querySelector('.controls');
     
-    // Load saved layout
-    const savedOrder = JSON.parse(localStorage.getItem('toolbarOrder'));
+    // Load saved layout (guard against corrupted localStorage JSON)
+    let savedOrder = null;
+    try {
+        savedOrder = JSON.parse(localStorage.getItem('toolbarOrder'));
+    } catch (err) {
+        console.warn('Ignoring corrupted toolbarOrder in localStorage:', err);
+        localStorage.removeItem('toolbarOrder');
+    }
     if (savedOrder) {
         savedOrder.forEach(id => {
             const group = document.querySelector(`.controls-group[data-id="${id}"]`);
@@ -1751,7 +1824,7 @@ Transcriptions & translations in this program are generated by various Artificia
 ## 🚀 Getting Started
 Use the **Library** to download new issues, or the **Search** tab to find specific content inside your downloaded magazines.
 
-**To safely close the application**, simply close your browser tab! The background server will automatically shut down after 20 seconds to save memory.
+**To safely close the application**, simply close your browser tab! The background server will automatically shut down after about 3 minutes of inactivity to save memory.
 
 ---
 
@@ -1879,7 +1952,7 @@ function toggleHelp(forceOpen = false) {
     if (overlay.style.display === 'flex' && !forceOpen) {
         closeHelp();
     } else {
-        document.getElementById('help-content').innerHTML = marked.parse(HELP_MARKDOWN);
+        document.getElementById('help-content').innerHTML = DOMPurify.sanitize(marked.parse(HELP_MARKDOWN));
         overlay.style.display = 'flex';
     }
 }
@@ -1955,8 +2028,48 @@ document.getElementById('mag-input').addEventListener('change', (e) => {
 
 pageInput.onchange = () => { update(); pageInput.blur(); };
 
-// Server Ping
-setInterval(() => { fetch('/api/ping').catch(() => {}); }, 5000);
+// Server Ping (heartbeat)
+// Pings only while the tab is visible; a hidden tab lets the server idle out.
+// After 3 consecutive failures we assume the server has shut down and show
+// a banner asking the user to relaunch the app.
+let pingFailureCount = 0;
+
+function showServerDownBanner() {
+    if (document.getElementById('server-down-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'server-down-banner';
+    banner.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99999; background:#dc3545; color:#fff; text-align:center; padding:10px 16px; font-weight:bold; font-family:sans-serif;';
+    banner.textContent = '⚠️ The server has shut down. Please relaunch the app to continue.';
+    document.body.prepend(banner);
+}
+
+async function sendPing() {
+    if (document.visibilityState !== 'visible') return;
+    try {
+        const res = await fetch('/api/ping');
+        if (!res.ok) throw new Error(`ping status ${res.status}`);
+        pingFailureCount = 0;
+        const banner = document.getElementById('server-down-banner');
+        if (banner) banner.remove();
+    } catch (err) {
+        pingFailureCount++;
+        if (pingFailureCount >= 3) showServerDownBanner();
+    }
+}
+
+setInterval(sendPing, 5000);
+
+// Ping immediately when the tab becomes visible again so the server
+// knows we're back before the next interval tick.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') sendPing();
+});
+
+// Final heartbeat on pagehide (sendBeacon works during unload; /api/ping
+// accepts token-less POSTs for exactly this reason).
+window.addEventListener('pagehide', () => {
+    if (navigator.sendBeacon) navigator.sendBeacon('/api/ping');
+});
 
 let disclaimerDisplayed = false;
 function showAIDisclaimer() {

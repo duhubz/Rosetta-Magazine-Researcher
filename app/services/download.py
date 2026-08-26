@@ -14,6 +14,7 @@ from typing import Any
 
 import app.config as cfg
 from app.services import metadata, state, zip_utils
+from app.utils import atomic_write_text, safe_name
 
 def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_type: str) -> bool:
     """
@@ -46,6 +47,8 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
                 with open(out_path, "wb") as f:
                     downloaded = 0
                     while True:
+                        if state.SHUTDOWN_EVENT.is_set():
+                            raise RuntimeError("Server is shutting down")
                         chunk = response.read(16384)
                         if not chunk: break
                         f.write(chunk)
@@ -55,12 +58,22 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
             return True
         except Exception:
             if out_path.exists(): out_path.unlink()
+            if state.SHUTDOWN_EVENT.is_set(): break
             continue
             
     state.DOWNLOAD_STATE[task_id]["error"] = f"All {file_type} mirrors failed."
     return False
 
 def download_worker(task_id: str, item: dict[str, Any]) -> None:
+    """Entry point for the background download thread.
+
+    Marks the whole install as a write-in-progress section so the idle
+    shutdown monitor won't kill the process mid-install.
+    """
+    with state.write_in_progress():
+        _download_worker_impl(task_id, item)
+
+def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     """
     Background worker thread for downloading and installing a magazine.
     
@@ -80,12 +93,23 @@ def download_worker(task_id: str, item: dict[str, Any]) -> None:
     temp_dir = data_dir / f".temp_{task_id}"
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    pdf_filename = item.get("pdf_filename", "mag.pdf")
+    # Sanitize catalog-derived filenames: basename only, no dot/hidden names.
+    try:
+        pdf_filename = safe_name(item.get("pdf_filename"), "mag.pdf")
+        zip_filename = safe_name(
+            item.get("zip_filename") or "", f"{Path(pdf_filename).stem}_Data.zip"
+        )
+    except ValueError:
+        state.DOWNLOAD_STATE[task_id]["error"] = "Catalog entry has an unsafe filename."
+        state.DOWNLOAD_STATE[task_id]["done"] = True
+        return
+
     pdf_temp = temp_dir / pdf_filename
-    zip_temp = temp_dir / (item.get("zip_filename") or f"{Path(pdf_filename).stem}_Data.zip")
+    zip_temp = temp_dir / zip_filename
 
     # Step 1: Check Local PDF availability
-    existing_rel_path = next((f for f in state.METADATA_CACHE.keys() if f.endswith(pdf_filename)), None)
+    cache = state.METADATA_CACHE
+    existing_rel_path = next((f for f in list(cache.keys()) if Path(f).name == pdf_filename), None)
     existing_pdf_path = (data_dir / existing_rel_path) if existing_rel_path else None
 
     if existing_pdf_path and existing_pdf_path.exists():
@@ -117,10 +141,22 @@ def download_worker(task_id: str, item: dict[str, Any]) -> None:
                     meta = metadata.parse_metadata(z.read(meta_file).decode("utf-8", errors="ignore"))
         except Exception: pass
 
-    # Build Folder: Magazines/MagName/Date - IssueName
-    mag_name = meta.get("name", item.get("magazine_name", "Unsorted")).replace("/", "_").replace("\\", "_")
-    date_str = meta.get("date", item.get("date", "")).replace("/", "-").replace("\\", "-")
-    issue_name = meta.get("issue_name", item.get("issue_name", "")).replace("/", "_").replace("\\", "_")
+    # Build Folder: Magazines/MagName/Date - IssueName (sanitized components)
+    try:
+        mag_name = safe_name(
+            meta.get("name", item.get("magazine_name", "")).replace("/", "_").replace("\\", "_"),
+            "Unsorted",
+        )
+        date_str = meta.get("date", item.get("date", "")).replace("/", "-").replace("\\", "-")
+        if date_str: date_str = safe_name(date_str)
+        issue_name = meta.get("issue_name", item.get("issue_name", "")).replace("/", "_").replace("\\", "_")
+        if issue_name: issue_name = safe_name(issue_name)
+    except ValueError:
+        state.DOWNLOAD_STATE[task_id]["error"] = "Catalog entry has an unsafe folder name."
+        state.DOWNLOAD_STATE[task_id]["done"] = True
+        try: shutil.rmtree(temp_dir)
+        except Exception: pass
+        return
 
     folder_name = ""
     if date_str and issue_name: folder_name = f"{date_str} - {issue_name}"
@@ -129,11 +165,20 @@ def download_worker(task_id: str, item: dict[str, Any]) -> None:
 
     final_dir = data_dir / mag_name
     if folder_name: final_dir = final_dir / folder_name
+
+    # Defense in depth: verify the destination stays inside data_dir.
+    if not final_dir.resolve().is_relative_to(data_dir.resolve()):
+        state.DOWNLOAD_STATE[task_id]["error"] = "Unsafe destination path rejected."
+        state.DOWNLOAD_STATE[task_id]["done"] = True
+        try: shutil.rmtree(temp_dir)
+        except Exception: pass
+        return
+
     final_dir.mkdir(parents=True, exist_ok=True)
 
     # Move files from temp to final
     if success_pdf and pdf_temp.exists():
-        os.replace(pdf_temp, final_dir / item.get("pdf_filename"))
+        os.replace(pdf_temp, final_dir / pdf_filename)
     if success_zip and zip_temp.exists():
         os.replace(zip_temp, final_dir / zip_temp.name)
 
@@ -155,7 +200,7 @@ def download_worker(task_id: str, item: dict[str, Any]) -> None:
             if loose_meta.exists(): os.remove(loose_meta)
         except Exception: pass
     else:
-        loose_meta.write_text(meta_content, encoding="utf-8")
+        atomic_write_text(loose_meta, meta_content)
 
     # Cleanup temp
     try: shutil.rmtree(temp_dir)

@@ -26,6 +26,15 @@ else:
 
 _config: Optional[dict[str, Any]] = None
 
+# Hosts the backend is allowed to fetch from (catalogs, covers).
+# Overridable via config.yaml: security.allowed_fetch_hosts
+DEFAULT_ALLOWED_FETCH_HOSTS = [
+    "gamingalexandria.com",
+    "www.gamingalexandria.com",
+    "archive.org",
+    "*.archive.org",
+]
+
 def _default_config() -> dict[str, Any]:
     """Provides fallback values if config.yaml is missing."""
     return {
@@ -49,8 +58,11 @@ def _default_config() -> dict[str, Any]:
             "cover_fetch_timeout": 5,
         },
         "heartbeat": {
-            "shutdown_after_idle_seconds": 20,
+            "shutdown_after_idle_seconds": 180,
             "check_interval_seconds": 5,
+        },
+        "security": {
+            "allowed_fetch_hosts": list(DEFAULT_ALLOWED_FETCH_HOSTS),
         },
     }
 
@@ -96,5 +108,8 @@ def server_dev_mode() -> bool: return bool(get_config().get("server", {}).get("d
 def download_timeout() -> int: return int(get_config().get("download", {}).get("timeout_seconds", 60))
 def catalog_fetch_timeout() -> int: return int(get_config().get("download", {}).get("catalog_fetch_timeout", 10))
 def cover_fetch_timeout() -> int: return int(get_config().get("download", {}).get("cover_fetch_timeout", 5))
-def heartbeat_shutdown_seconds() -> int: return int(get_config().get("heartbeat", {}).get("shutdown_after_idle_seconds", 20))
+def heartbeat_shutdown_seconds() -> int: return int(get_config().get("heartbeat", {}).get("shutdown_after_idle_seconds", 180))
 def heartbeat_check_interval() -> int: return int(get_config().get("heartbeat", {}).get("check_interval_seconds", 5))
+def allowed_fetch_hosts() -> list[str]:
+    hosts = get_config().get("security", {}).get("allowed_fetch_hosts")
+    return list(hosts) if hosts else list(DEFAULT_ALLOWED_FETCH_HOSTS)

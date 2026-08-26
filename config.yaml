@@ -23,5 +23,14 @@ download:
   cover_fetch_timeout: 5
 
 heartbeat:
-  shutdown_after_idle_seconds: 20
+  shutdown_after_idle_seconds: 180  # Auto-exit after no browser heartbeat for this long
   check_interval_seconds: 5
+
+security:
+  # Hosts the app is allowed to fetch catalogs/covers from (http/https only).
+  # Entries starting with "*." match any subdomain.
+  allowed_fetch_hosts:
+    - gamingalexandria.com
+    - www.gamingalexandria.com
+    - archive.org
+    - "*.archive.org"
