@@ -334,8 +334,12 @@ def get_downloads() -> Response:
 @bp.route("/uninstall", methods=["POST"])
 def uninstall_mag() -> Response:
     """Safely removes a magazine PDF and all associated data files from the local library."""
-    pdf_filename = request.json.get("pdf_filename")
-    target_rel_path = next((f for f in state.METADATA_CACHE.keys() if f.endswith(pdf_filename)), None)
+    pdf_filename = (request.get_json(silent=True) or {}).get("pdf_filename")
+    if not pdf_filename:
+        return jsonify({"error": "Bad request", "detail": "'pdf_filename' is required."}), 400
+    # Exact basename match — endswith() would let 'game.pdf' match 'Endgame.pdf'.
+    cache = state.METADATA_CACHE  # local ref: reload swaps the global binding
+    target_rel_path = next((f for f in list(cache.keys()) if Path(f).name == pdf_filename), None)
     
     if not target_rel_path:
         return jsonify({"error": "File not found"}), 404

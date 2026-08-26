@@ -940,7 +940,8 @@ function renderLibrary() {
     }
 
     catalogData.forEach(item => {
-        const localRelPath = localFiles.find(f => f.endsWith(item.pdf_filename));
+        // Exact basename match — endsWith would let 'game.pdf' match 'Endgame.pdf'
+        const localRelPath = localFiles.find(f => f.split('/').pop() === item.pdf_filename);
         const isDownloaded = !!localRelPath;
         
         let updateAvailable = false;
@@ -1267,7 +1268,7 @@ async function readIssue(filename) {
     const actionArea = document.getElementById('modal-action-area');
     actionArea.innerHTML = `<div style="text-align:center; color:var(--accent); font-weight:bold;">🔄 Opening Issue...</div>`;
     await init(); 
-    const match = localFiles.find(f => f.endsWith(filename));
+    const match = localFiles.find(f => f.split('/').pop() === filename);
     
     if (match) {
         magSelect.value = match;

@@ -132,8 +132,9 @@ def load_metadata_cache() -> None:
 
         temp_cache[rel_path] = meta
 
-    state.METADATA_CACHE.clear()
-    state.METADATA_CACHE.update(temp_cache)
+    # Atomic swap: rebinding the global is safe for concurrent readers,
+    # whereas clear()+update() would expose a momentarily-empty cache.
+    state.METADATA_CACHE = temp_cache
 
 def get_transcription_text(pdf_rel_path: str, page_str: str) -> Optional[str]:
     """
