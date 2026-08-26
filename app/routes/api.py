@@ -21,7 +21,14 @@ from flask import Blueprint, Response, jsonify, request, send_file
 import app.config as cfg
 from app.services import catalog, download, metadata, search as search_svc, state
 from app.services import zip_utils
-from app.utils import atomic_write_bytes, atomic_write_text, get_safe_path, is_allowed_fetch_url
+from app.services.text_utils import split_sections
+from app.utils import (
+    atomic_write_bytes,
+    atomic_write_text,
+    get_safe_path,
+    has_hidden_component,
+    is_allowed_fetch_url,
+)
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("api", __name__)
@@ -50,7 +57,11 @@ def list_mags() -> Response:
     data_dir = cfg.data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     metadata.load_metadata_cache()
-    mags = [p.relative_to(data_dir).as_posix() for p in data_dir.rglob("*.pdf")]
+    mags = [
+        p.relative_to(data_dir).as_posix()
+        for p in data_dir.rglob("*.pdf")
+        if not has_hidden_component(p, data_dir)
+    ]
     return jsonify({"files": sorted(mags), "metadata": state.METADATA_CACHE})
 
 @bp.route("/render")
@@ -120,18 +131,7 @@ def get_text() -> Response:
     # Split Rosetta format into sections (Transcription, Translation, Summary)
     jp, en, sum_t = "No transcription found.", "", ""
     if content:
-        content = re.sub(r"^#\s?GA-TRANSCRIPTION\s*", "", content, flags=re.IGNORECASE)
-        parts = re.split(r"#\s?GA-TRANSLATION", content, flags=re.IGNORECASE)
-
-        if len(parts) > 1:
-            jp = parts[0].strip()
-            sub = re.split(r"#\s?GA-SUMMARY", parts[1], flags=re.IGNORECASE)
-            en = sub[0].strip()
-            sum_t = sub[1].strip() if len(sub) > 1 else ""
-        else:
-            sub = re.split(r"#\s?GA-SUMMARY", parts[0], flags=re.IGNORECASE)
-            jp = sub[0].strip()
-            sum_t = sub[1].strip() if len(sub) > 1 else ""
+        jp, en, sum_t = split_sections(content)
 
     # Fetch raw metadata for the visual editor
     raw_meta = ""

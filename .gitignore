@@ -1,6 +1,9 @@
 Covers
 Magazines
 *.json
+# SQLite FTS5 search index (lives inside the data dir)
+.rosetta_index.db
+.rosetta_index.db-*
 __pycache__/
 *.pyc
 venv/
