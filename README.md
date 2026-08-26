@@ -1,5 +1,7 @@
 # Rosetta Magazine Researcher 📚
 
+[![Build](https://github.com/duhubz/Rosetta-Magazine-Researcher/actions/workflows/build.yml/badge.svg)](https://github.com/duhubz/Rosetta-Magazine-Researcher/actions/workflows/build.yml)
+
 A fully offline-capable archive viewer with smart search, text formatting, and community catalogs to download magazines along with translations and transcriptions. Designed to seamlessly read scanned PDFs alongside transcribed text, translations, and rich metadata.
 
 If this tool saved you some time and you'd like to support the project, feel free to buy me a beer! Translations and transcriptions cost money to generate so any support is greatly appreciated.
