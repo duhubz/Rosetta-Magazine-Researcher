@@ -263,7 +263,7 @@ def bookmarks_handler() -> Response:
 @bp.route("/cover/<item_id>")
 def get_cover(item_id: str) -> Response:
     """Fetches cover images. Uses local cache, then remote download via local catalog lookup."""
-    v = request.args.get("v", "1.0")
+    v = re.sub(r"[^\w.-]", "", request.args.get("v", "1.0")) or "1.0"
     safe_id = "".join(c for c in item_id if c.isalnum() or c in "_-")
     cache_name = f"{safe_id}_v{v}.cache"
 
