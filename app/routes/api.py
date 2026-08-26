@@ -57,32 +57,57 @@ def list_mags() -> Response:
 def render_page() -> Response:
     """Renders a specific PDF page to a PNG image for the viewer."""
     mag = request.args.get("mag", "")
-    pn = int(request.args.get("page", 0))
-    zoom = float(request.args.get("zoom", 1.5))
-    
+    try:
+        pn = int(request.args.get("page", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Bad request", "detail": "'page' must be an integer."}), 400
+    try:
+        zoom = float(request.args.get("zoom", 1.5))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Bad request", "detail": "'zoom' must be a number."}), 400
+    # Clamp zoom to a sane range to bound pixmap memory usage.
+    zoom = max(0.25, min(zoom, 4.0))
+
     if not mag or pn < 0:
         return jsonify({"error": "Invalid magazine or page parameters"}), 400
 
     try:
         pdf_path = get_safe_path(mag)
+    except ValueError as e:
+        return jsonify({"error": "Bad request", "detail": str(e)}), 400
+
+    doc = None
+    try:
         doc = fitz.open(pdf_path)
         page = doc.load_page(pn)
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
         img = pix.tobytes("png")
-        doc.close()
         return send_file(io.BytesIO(img), mimetype="image/png")
     except Exception as e:
         logger.error(f"Render failed for {mag} page {pn}: {e}")
         return jsonify({"error": str(e)}), 500
+    finally:
+        # Always release the document handle, even when load/render fails.
+        if doc is not None:
+            try: doc.close()
+            except Exception: pass
 
 @bp.route("/text")
 def get_text() -> Response:
     """Retrieves all text sections and spatial coordinates for a specific page."""
     mag_rel_path = request.args.get("mag", "")
-    pg = request.args.get("page", "1").zfill(3)
-    
+    pg_raw = request.args.get("page", "1")
+    if not mag_rel_path:
+        return jsonify({"error": "Bad request", "detail": "'mag' is required."}), 400
+    if not pg_raw.isdigit():
+        return jsonify({"error": "Bad request", "detail": "'page' must be a positive integer."}), 400
+    pg = pg_raw.zfill(3)
+
+    try:
+        pdf_path = Path(get_safe_path(mag_rel_path))
+    except ValueError as e:
+        return jsonify({"error": "Bad request", "detail": str(e)}), 400
     content = metadata.get_transcription_text(mag_rel_path, pg)
-    pdf_path = Path(get_safe_path(mag_rel_path))
 
     # Determine total pages for UI constraints
     total = 0
@@ -151,14 +176,24 @@ def get_text() -> Response:
 @bp.route("/save", methods=["POST"])
 def save_text() -> Response:
     """Saves edited transcription, metadata, and coordinates to local disk or ZIP."""
-    data = request.json
+    data = request.get_json(silent=True) or {}
     rel_path = data.get("mag")
-    page_num = int(data.get("page", 0))
+    try:
+        page_num = int(data.get("page", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Bad request", "detail": "'page' must be an integer."}), 400
     
     if not rel_path or page_num <= 0:
         return jsonify({"error": "Invalid magazine path or page number"}), 400
 
-    pdf_path = Path(get_safe_path(rel_path))
+    missing = [k for k in ("jp", "en", "sum") if k not in data]
+    if missing:
+        return jsonify({"error": "Bad request", "detail": f"Missing required keys: {', '.join(missing)}."}), 400
+
+    try:
+        pdf_path = Path(get_safe_path(rel_path))
+    except ValueError as e:
+        return jsonify({"error": "Bad request", "detail": str(e)}), 400
     new_page_content = f"{data['jp']}\n\n#GA-TRANSLATION\n{data['en']}\n\n#GA-SUMMARY\n{data['sum']}"
     
     try:
@@ -191,9 +226,11 @@ def save_text() -> Response:
                     target_p = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
                     atomic_write_text(target_p, content_h)
 
-            # 2. Update Metadata
-            if partner_zip: zip_utils.update_zip_content(partner_zip, "metadata.txt", data.get("meta", ""))
-            else: atomic_write_text(pdf_path.with_name(pdf_path.stem + ".metadata.txt"), data.get("meta", ""))
+            # 2. Update Metadata (only when the client actually sent a 'meta'
+            # key, so partial saves can't blank out metadata.txt)
+            if "meta" in data:
+                if partner_zip: zip_utils.update_zip_content(partner_zip, "metadata.txt", data.get("meta", ""))
+                else: atomic_write_text(pdf_path.with_name(pdf_path.stem + ".metadata.txt"), data.get("meta", ""))
 
             # 3. Update Coordinates
             if data.get("coords") is not None:
@@ -256,7 +293,9 @@ def bookmarks_handler() -> Response:
     bks = json.loads(bookmarks_file.read_text(encoding="utf-8"))
     
     if request.method == "POST":
-        d = request.json
+        d = request.get_json(silent=True) or {}
+        if not d.get("mag") or not d.get("page"):
+            return jsonify({"error": "Bad request", "detail": "'mag' and 'page' are required."}), 400
         bks[f"{d['mag']}_{d['page']}"] = d
     elif request.method == "DELETE":
         key = request.args.get("key")
@@ -318,7 +357,9 @@ def get_catalog() -> Response:
 @bp.route("/download", methods=["POST"])
 def start_download() -> Response:
     """Starts a background download worker for a specific catalog ID."""
-    item_id = request.json.get("id")
+    item_id = (request.get_json(silent=True) or {}).get("id")
+    if not item_id:
+        return jsonify({"error": "Bad request", "detail": "'id' is required."}), 400
     catalog_data = catalog.get_all_catalogs(force_refresh=False)
     item = next((i for i in catalog_data if i.get("id") == item_id), None)
     if item:
