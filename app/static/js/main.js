@@ -2008,8 +2008,48 @@ document.getElementById('mag-input').addEventListener('change', (e) => {
 
 pageInput.onchange = () => { update(); pageInput.blur(); };
 
-// Server Ping
-setInterval(() => { fetch('/api/ping').catch(() => {}); }, 5000);
+// Server Ping (heartbeat)
+// Pings only while the tab is visible; a hidden tab lets the server idle out.
+// After 3 consecutive failures we assume the server has shut down and show
+// a banner asking the user to relaunch the app.
+let pingFailureCount = 0;
+
+function showServerDownBanner() {
+    if (document.getElementById('server-down-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'server-down-banner';
+    banner.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99999; background:#dc3545; color:#fff; text-align:center; padding:10px 16px; font-weight:bold; font-family:sans-serif;';
+    banner.textContent = '⚠️ The server has shut down. Please relaunch the app to continue.';
+    document.body.prepend(banner);
+}
+
+async function sendPing() {
+    if (document.visibilityState !== 'visible') return;
+    try {
+        const res = await fetch('/api/ping');
+        if (!res.ok) throw new Error(`ping status ${res.status}`);
+        pingFailureCount = 0;
+        const banner = document.getElementById('server-down-banner');
+        if (banner) banner.remove();
+    } catch (err) {
+        pingFailureCount++;
+        if (pingFailureCount >= 3) showServerDownBanner();
+    }
+}
+
+setInterval(sendPing, 5000);
+
+// Ping immediately when the tab becomes visible again so the server
+// knows we're back before the next interval tick.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') sendPing();
+});
+
+// Final heartbeat on pagehide (sendBeacon works during unload; /api/ping
+// accepts token-less POSTs for exactly this reason).
+window.addEventListener('pagehide', () => {
+    if (navigator.sendBeacon) navigator.sendBeacon('/api/ping');
+});
 
 let disclaimerDisplayed = false;
 function showAIDisclaimer() {

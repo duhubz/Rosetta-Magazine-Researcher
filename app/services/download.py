@@ -14,7 +14,7 @@ from typing import Any
 
 import app.config as cfg
 from app.services import metadata, state, zip_utils
-from app.utils import safe_name
+from app.utils import atomic_write_text, safe_name
 
 def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_type: str) -> bool:
     """
@@ -47,6 +47,8 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
                 with open(out_path, "wb") as f:
                     downloaded = 0
                     while True:
+                        if state.SHUTDOWN_EVENT.is_set():
+                            raise RuntimeError("Server is shutting down")
                         chunk = response.read(16384)
                         if not chunk: break
                         f.write(chunk)
@@ -56,12 +58,22 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
             return True
         except Exception:
             if out_path.exists(): out_path.unlink()
+            if state.SHUTDOWN_EVENT.is_set(): break
             continue
             
     state.DOWNLOAD_STATE[task_id]["error"] = f"All {file_type} mirrors failed."
     return False
 
 def download_worker(task_id: str, item: dict[str, Any]) -> None:
+    """Entry point for the background download thread.
+
+    Marks the whole install as a write-in-progress section so the idle
+    shutdown monitor won't kill the process mid-install.
+    """
+    with state.write_in_progress():
+        _download_worker_impl(task_id, item)
+
+def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     """
     Background worker thread for downloading and installing a magazine.
     
@@ -188,7 +200,7 @@ def download_worker(task_id: str, item: dict[str, Any]) -> None:
             if loose_meta.exists(): os.remove(loose_meta)
         except Exception: pass
     else:
-        loose_meta.write_text(meta_content, encoding="utf-8")
+        atomic_write_text(loose_meta, meta_content)
 
     # Cleanup temp
     try: shutil.rmtree(temp_dir)

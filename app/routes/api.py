@@ -162,67 +162,68 @@ def save_text() -> Response:
     new_page_content = f"{data['jp']}\n\n#GA-TRANSLATION\n{data['en']}\n\n#GA-SUMMARY\n{data['sum']}"
     
     try:
-        partner_zip = metadata.get_partner_zip(rel_path)
-        master_filename = f"{pdf_path.stem}_COMPLETE.txt"
-        master_path = pdf_path.parent / master_filename
-        if not master_path.exists(): master_path = None
+        with state.write_in_progress():
+            partner_zip = metadata.get_partner_zip(rel_path)
+            master_filename = f"{pdf_path.stem}_COMPLETE.txt"
+            master_path = pdf_path.parent / master_filename
+            if not master_path.exists(): master_path = None
         
-        # 1. Update Content (Master File or Page Files)
-        if master_path or (partner_zip and any(n.split("/")[-1].lower() == master_filename.lower() for n in zipfile.ZipFile(partner_zip, "r").namelist())):
-            raw_text = master_path.read_text(encoding="utf-8") if master_path else ""
-            if not raw_text and partner_zip:
-                with zipfile.ZipFile(partner_zip, "r") as z:
-                    z_m = next(n for n in z.namelist() if n.split("/")[-1].lower() == master_filename.lower())
-                    raw_text = z.read(z_m).decode("utf-8")
-            
-            pages = metadata.get_pages_from_master(raw_text)
-            pages[page_num] = new_page_content
-            new_master = "\n\n".join([f"[[PAGE_{str(p).zfill(3)}]]\n{c}" for p, c in sorted(pages.items())])
-            
-            if master_path: master_path.write_text(new_master, encoding="utf-8")
-            else: zip_utils.update_zip_content(partner_zip, master_filename, new_master)
-        else:
-            content_h = f"#GA-TRANSCRIPTION\n{new_page_content}"
-            if partner_zip:
-                target = f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
-                zip_utils.update_zip_content(partner_zip, target, content_h)
-            else:
-                target_p = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
-                target_p.write_text(content_h, encoding="utf-8")
-
-        # 2. Update Metadata
-        if partner_zip: zip_utils.update_zip_content(partner_zip, "metadata.txt", data.get("meta", ""))
-        else: (pdf_path.with_name(pdf_path.stem + ".metadata.txt")).write_text(data.get("meta", ""), encoding="utf-8")
-
-        # 3. Update Coordinates
-        if data.get("coords") is not None:
-            c_fn = f"{pdf_path.stem}_COORDINATES.json"
-            all_c = []
-            if partner_zip:
-                try:
+            # 1. Update Content (Master File or Page Files)
+            if master_path or (partner_zip and any(n.split("/")[-1].lower() == master_filename.lower() for n in zipfile.ZipFile(partner_zip, "r").namelist())):
+                raw_text = master_path.read_text(encoding="utf-8") if master_path else ""
+                if not raw_text and partner_zip:
                     with zipfile.ZipFile(partner_zip, "r") as z:
-                        z_c = next((n for n in z.namelist() if n.split("/")[-1].lower() == c_fn.lower()), None)
-                        if z_c: all_c = json.loads(z.read(z_c).decode("utf-8"))
-                except Exception: pass
+                        z_m = next(n for n in z.namelist() if n.split("/")[-1].lower() == master_filename.lower())
+                        raw_text = z.read(z_m).decode("utf-8")
+            
+                pages = metadata.get_pages_from_master(raw_text)
+                pages[page_num] = new_page_content
+                new_master = "\n\n".join([f"[[PAGE_{str(p).zfill(3)}]]\n{c}" for p, c in sorted(pages.items())])
+            
+                if master_path: atomic_write_text(master_path, new_master)
+                else: zip_utils.update_zip_content(partner_zip, master_filename, new_master)
             else:
-                l_c = pdf_path.parent / c_fn
-                if l_c.exists():
-                    try: all_c = json.loads(l_c.read_text(encoding="utf-8"))
-                    except Exception: pass
-            
-            found = False
-            for c in all_c:
-                if str(c.get("page")) == str(page_num):
-                    c["data"] = data["coords"]; found = True; break
-            if not found: all_c.append({"page": page_num, "data": data["coords"]})
-            
-            new_c_json = json.dumps(all_c, ensure_ascii=False, indent=2)
-            if partner_zip: zip_utils.update_zip_content(partner_zip, c_fn, new_c_json)
-            else: (pdf_path.parent / c_fn).write_text(new_c_json, encoding="utf-8")
+                content_h = f"#GA-TRANSCRIPTION\n{new_page_content}"
+                if partner_zip:
+                    target = f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
+                    zip_utils.update_zip_content(partner_zip, target, content_h)
+                else:
+                    target_p = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
+                    atomic_write_text(target_p, content_h)
 
-        metadata.load_metadata_cache()
-        logger.info(f"Saved changes for {rel_path} page {page_num}")
-        return jsonify({"status": "ok"})
+            # 2. Update Metadata
+            if partner_zip: zip_utils.update_zip_content(partner_zip, "metadata.txt", data.get("meta", ""))
+            else: atomic_write_text(pdf_path.with_name(pdf_path.stem + ".metadata.txt"), data.get("meta", ""))
+
+            # 3. Update Coordinates
+            if data.get("coords") is not None:
+                c_fn = f"{pdf_path.stem}_COORDINATES.json"
+                all_c = []
+                if partner_zip:
+                    try:
+                        with zipfile.ZipFile(partner_zip, "r") as z:
+                            z_c = next((n for n in z.namelist() if n.split("/")[-1].lower() == c_fn.lower()), None)
+                            if z_c: all_c = json.loads(z.read(z_c).decode("utf-8"))
+                    except Exception: pass
+                else:
+                    l_c = pdf_path.parent / c_fn
+                    if l_c.exists():
+                        try: all_c = json.loads(l_c.read_text(encoding="utf-8"))
+                        except Exception: pass
+            
+                found = False
+                for c in all_c:
+                    if str(c.get("page")) == str(page_num):
+                        c["data"] = data["coords"]; found = True; break
+                if not found: all_c.append({"page": page_num, "data": data["coords"]})
+            
+                new_c_json = json.dumps(all_c, ensure_ascii=False, indent=2)
+                if partner_zip: zip_utils.update_zip_content(partner_zip, c_fn, new_c_json)
+                else: atomic_write_text(pdf_path.parent / c_fn, new_c_json)
+
+            metadata.load_metadata_cache()
+            logger.info(f"Saved changes for {rel_path} page {page_num}")
+            return jsonify({"status": "ok"})
     except Exception as e:
         logger.error(f"Save failed for {rel_path}: {e}")
         return jsonify({"error": str(e)}), 500
@@ -250,7 +251,7 @@ def bookmarks_handler() -> Response:
     """Handles retrieval, creation, and deletion of page bookmarks."""
     bookmarks_file = cfg.bookmarks_file()
     if not bookmarks_file.exists():
-        bookmarks_file.write_text("{}", encoding="utf-8")
+        atomic_write_text(bookmarks_file, "{}")
     
     bks = json.loads(bookmarks_file.read_text(encoding="utf-8"))
     
@@ -261,7 +262,8 @@ def bookmarks_handler() -> Response:
         key = request.args.get("key")
         if key in bks: del bks[key]
         
-    bookmarks_file.write_text(json.dumps(bks), encoding="utf-8")
+    with state.write_in_progress():
+        atomic_write_text(bookmarks_file, json.dumps(bks))
     return jsonify(bks)
 
 @bp.route("/cover/<item_id>")
