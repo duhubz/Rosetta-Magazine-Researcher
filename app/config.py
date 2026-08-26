@@ -72,6 +72,7 @@ def _default_config() -> dict[str, Any]:
         "security": {
             "allowed_fetch_hosts": list(DEFAULT_ALLOWED_FETCH_HOSTS),
             "allow_downloads_from_any_host": False,
+            "max_redirects": 5,
         },
     }
 
@@ -132,3 +133,10 @@ def allow_downloads_from_any_host() -> bool:
     http/https are always rejected regardless of this flag.
     """
     return bool(get_config().get("security", {}).get("allow_downloads_from_any_host", False))
+def max_redirects() -> int:
+    """Maximum HTTP redirects followed per fetch (utils.safe_urlopen).
+
+    Every redirect hop is re-validated against the fetch allowlist before
+    it is followed.
+    """
+    return int(get_config().get("security", {}).get("max_redirects", 5))
