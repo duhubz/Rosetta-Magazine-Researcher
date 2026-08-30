@@ -2,3 +2,6 @@ Flask>=3.0,<4
 PyMuPDF>=1.24
 certifi
 PyYAML>=6.0
+requests>=2.31,<3
+pycryptodome>=3.20,<4
+tenacity>=8.0,<10

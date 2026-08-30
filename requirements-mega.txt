@@ -1,0 +1,3 @@
+# mega.py 1.0.8 declares an obsolete tenacity<6 constraint. Install this
+# package without dependencies; compatible dependencies are in requirements.txt.
+mega.py==1.0.8

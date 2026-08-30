@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import app.config as cfg
-from app.services import metadata, state, zip_utils
+from app.services import mega_download, metadata, state, zip_utils
 from app.utils import atomic_write_text, is_allowed_fetch_url, safe_name
 
 
@@ -37,6 +37,8 @@ def _download_url_allowed(url: str) -> tuple[bool, str]:
         return False, "scheme not http/https"
     if scheme not in ("http", "https"):
         return False, "scheme not http/https"
+    if mega_download.is_public_share_url(url):
+        return True, ""
     if cfg.allow_downloads_from_any_host():
         return True, ""
     if is_allowed_fetch_url(url):
@@ -70,31 +72,34 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
         state.DOWNLOAD_STATE[task_id]["status"] = f"Downloading {file_type}..."
         state.DOWNLOAD_STATE[task_id]["progress"] = 0
 
-        # Cache-busting parameter to prevent stale downloads from CDNs
-        cb_param = f"nocache={int(time.time() * 1000)}"
-        busted_url = f"{url}&{cb_param}" if "?" in url else f"{url}?{cb_param}"
-
         try:
-            req = urllib.request.Request(
-                busted_url,
-                headers={
-                    "User-Agent": "RosettaResearcher/1.0",
-                    "Cache-Control": "no-cache",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=timeout) as response:
-                total_size = int(response.headers.get("Content-Length", 0))
-                with open(out_path, "wb") as f:
-                    downloaded = 0
-                    while True:
-                        if state.SHUTDOWN_EVENT.is_set():
-                            raise RuntimeError("Server is shutting down")
-                        chunk = response.read(16384)
-                        if not chunk: break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total_size:
-                            state.DOWNLOAD_STATE[task_id]["progress"] = int((downloaded / total_size) * 100)
+            if mega_download.is_public_share_url(url):
+                state.DOWNLOAD_STATE[task_id]["status"] = f"Downloading {file_type} via Mega..."
+                mega_download.download_public_file(url, out_path)
+            else:
+                # Cache-busting parameter to prevent stale downloads from CDNs
+                cb_param = f"nocache={int(time.time() * 1000)}"
+                busted_url = f"{url}&{cb_param}" if "?" in url else f"{url}?{cb_param}"
+                req = urllib.request.Request(
+                    busted_url,
+                    headers={
+                        "User-Agent": "RosettaResearcher/1.0",
+                        "Cache-Control": "no-cache",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as response:
+                    total_size = int(response.headers.get("Content-Length", 0))
+                    with open(out_path, "wb") as f:
+                        downloaded = 0
+                        while True:
+                            if state.SHUTDOWN_EVENT.is_set():
+                                raise RuntimeError("Server is shutting down")
+                            chunk = response.read(16384)
+                            if not chunk: break
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total_size:
+                                state.DOWNLOAD_STATE[task_id]["progress"] = int((downloaded / total_size) * 100)
             return True
         except Exception:
             if out_path.exists(): out_path.unlink()

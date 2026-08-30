@@ -37,13 +37,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyinstaller
         pip install -r requirements.txt
+        pip install --no-deps -r requirements-mega.txt
 
     # ---------------------------------------------
     # WINDOWS BUILD
     # ---------------------------------------------
     - name: Build Windows EXE
       if: matrix.os == 'windows-latest'
-      run: pyinstaller --onefile --windowed --icon="rosettaicon.ico" --name "Rosetta Magazine Researcher" --add-data "app/templates;app/templates" --add-data "app/static;app/static" --collect-data certifi --collect-all fitz --hidden-import=yaml app.py
+      run: pyinstaller --onefile --windowed --icon="rosettaicon.ico" --name "Rosetta Magazine Researcher" --add-data "app/templates;app/templates" --add-data "app/static;app/static" --collect-data certifi --collect-all fitz --collect-submodules mega --hidden-import=yaml app.py
 
     - name: Upload Windows File
       if: matrix.os == 'windows-latest'
@@ -68,6 +69,7 @@ jobs:
           --collect-submodules fitz \
           --collect-data fitz \
           --collect-data certifi \
+          --collect-submodules mega \
           --hidden-import=yaml \
           app.py
         
@@ -93,7 +95,7 @@ jobs:
     # ---------------------------------------------
     - name: Build Linux
       if: matrix.os == 'ubuntu-latest'
-      run: pyinstaller --onefile --windowed --name "Rosetta_Magazine_Researcher" --add-data "app/templates:app/templates" --add-data "app/static:app/static" --collect-data certifi --collect-all fitz --hidden-import=yaml app.py
+      run: pyinstaller --onefile --windowed --name "Rosetta_Magazine_Researcher" --add-data "app/templates:app/templates" --add-data "app/static:app/static" --collect-data certifi --collect-all fitz --collect-submodules mega --hidden-import=yaml app.py
 
     - name: Upload Linux File
       if: matrix.os == 'ubuntu-latest'

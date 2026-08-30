@@ -104,6 +104,23 @@ def test_allowlisted_hosts_are_fetched(workspace, fetched_urls, url):
     assert out.read_bytes() == PDF_BYTES
 
 
+def test_public_mega_source_uses_mega_provider(workspace, monkeypatch):
+    out = workspace / "Magazines" / "out.pdf"
+    _seed_task("t_mega")
+    source = "https://mega.nz/file/8t5EDIZD#6tYoTihYmdxdiEVIFXDJU2qEv7nCuKxe3xwgm3nDxY4"
+    called = []
+
+    def fake_mega_download(url, out_path):
+        called.append((url, out_path))
+        out_path.write_bytes(PDF_BYTES)
+
+    monkeypatch.setattr(download.mega_download, "download_public_file", fake_mega_download)
+
+    assert download.download_waterfall("t_mega", out, [source], "PDF") is True
+    assert called == [(source, out)]
+    assert out.read_bytes() == PDF_BYTES
+
+
 def test_dict_shaped_source_entries(workspace, fetched_urls):
     """Per-source dicts with a 'url' key follow the same allowlist rules."""
     out = workspace / "Magazines" / "out.pdf"
