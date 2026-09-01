@@ -480,6 +480,74 @@ async function saveCorrections() {
 
 
 // ==========================================
+// --- ACCESSIBLE DIALOG HELPER ---
+// ==========================================
+// Stack of open dialogs. Top of stack owns Escape and the Tab focus trap.
+// Entries: { overlay, previousFocus, allowEscape, onRequestClose }
+const dialogStack = [];
+
+function dialogFocusables(overlay) {
+    return Array.from(overlay.querySelectorAll(
+        'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])'
+    )).filter(el => !el.disabled && el.getClientRects().length > 0);
+}
+
+function openDialog(overlayId, { initialFocus = null, allowEscape = true, onRequestClose = null } = {}) {
+    const overlay = document.getElementById(overlayId);
+    if (!overlay) return;
+    if (dialogStack.some(d => d.overlay === overlay)) { overlay.style.display = 'flex'; return; }
+    dialogStack.push({
+        overlay,
+        previousFocus: document.activeElement,
+        allowEscape,
+        onRequestClose: onRequestClose || (() => closeDialog(overlayId)),
+    });
+    overlay.style.display = 'flex';
+    // Focus after paint so display:flex has taken effect.
+    setTimeout(() => {
+        const target = (initialFocus && document.getElementById(initialFocus)) || dialogFocusables(overlay)[0];
+        if (target) target.focus();
+    }, 0);
+}
+
+function closeDialog(overlayId) {
+    const overlay = document.getElementById(overlayId);
+    if (!overlay) return;
+    overlay.style.display = 'none';
+    const idx = dialogStack.findIndex(d => d.overlay === overlay);
+    if (idx === -1) return;
+    const [entry] = dialogStack.splice(idx, 1);
+    // Restore focus only if this was the topmost dialog and the opener still exists.
+    if (idx === dialogStack.length && entry.previousFocus && entry.previousFocus.isConnected) {
+        try { entry.previousFocus.focus(); } catch (err) { console.debug('focus restore failed:', err); }
+    }
+}
+
+// One permanent listener handles Escape + Tab trapping for the top dialog.
+// Attached at document level so the trap still works if focus was lost to
+// <body> (e.g. after innerHTML replaced the focused button).
+document.addEventListener('keydown', (e) => {
+    if (dialogStack.length === 0) return;
+    const top = dialogStack[dialogStack.length - 1];
+    if (e.key === 'Escape') {
+        if (!top.allowEscape) return;
+        e.preventDefault();
+        e.stopPropagation();
+        top.onRequestClose();
+        return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusables = dialogFocusables(top.overlay);
+    if (focusables.length === 0) { e.preventDefault(); return; }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (!top.overlay.contains(active)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+});
+
+// ==========================================
 // --- 5. ADVANCED TOAST-UI EDITORS ---
 // ==========================================
 
@@ -541,7 +609,7 @@ function openContentEditor(fieldKey) {
     if (!isEditing || !CONTENT_EDITOR_FIELDS[fieldKey]) return;
 
     activeContentEditorKey = fieldKey;
-    document.getElementById('editor-modal-overlay').style.display = 'flex';
+    openDialog('editor-modal-overlay', { onRequestClose: () => closeContentEditor() });
     ensureContentEditor();
 
     const field = CONTENT_EDITOR_FIELDS[fieldKey];
@@ -555,7 +623,7 @@ function openContentEditor(fieldKey) {
 
 function closeContentEditor(e) {
     if (e && e.target.id !== 'editor-modal-overlay' && !e.target.classList.contains('close-modal')) return;
-    document.getElementById('editor-modal-overlay').style.display = 'none';
+    closeDialog('editor-modal-overlay');
     activeContentEditorKey = null;
 }
 
@@ -682,12 +750,12 @@ function openMetadataEditor() {
     const { fields, extraLines } = parseMetadataText(document.getElementById('meta-edit').value || "");
     METADATA_FIELDS.forEach(({ key }) => document.getElementById(`meta-field-${key}`).value = fields[key] || "");
     document.getElementById('meta-extra-lines').value = extraLines;
-    document.getElementById('metadata-modal-overlay').style.display = 'flex';
+    openDialog('metadata-modal-overlay', { onRequestClose: () => closeMetadataEditor() });
 }
 
 function closeMetadataEditor(e) {
     if (e && e.target.id !== 'metadata-modal-overlay' && !e.target.classList.contains('close-modal')) return;
-    document.getElementById('metadata-modal-overlay').style.display = 'none';
+    closeDialog('metadata-modal-overlay');
 }
 
 function applyMetadataEditor() {
@@ -901,13 +969,12 @@ function openBookmarkModal() {
 
     document.getElementById('bookmark-modal-target').innerText = `${prettyName} • Page ${pageInput.value}`;
     document.getElementById('bookmark-tags-input').value = existing?.tags || "";
-    document.getElementById('bookmark-modal-overlay').style.display = 'flex';
-    setTimeout(() => { document.getElementById('bookmark-tags-input').focus(); }, 0);
+    openDialog('bookmark-modal-overlay', { initialFocus: 'bookmark-tags-input', onRequestClose: () => closeBookmarkModal() });
 }
 
 function closeBookmarkModal(e) {
     if (e && e.target.id !== 'bookmark-modal-overlay' && !e.target.classList.contains('close-modal')) return;
-    document.getElementById('bookmark-modal-overlay').style.display = 'none';
+    closeDialog('bookmark-modal-overlay');
 }
 
 function handleBookmarkModalKeydown(event) {
@@ -942,8 +1009,9 @@ async function fetchCatalog() {
 
 function toggleLibrary(forceOpen = false) {
     const overlay = document.getElementById('library-overlay');
-    if (forceOpen) overlay.style.display = 'flex';
-    else overlay.style.display = overlay.style.display === 'flex' ? 'none' : 'flex';
+    const isOpen = overlay.style.display === 'flex';
+    if (forceOpen || !isOpen) openDialog('library-overlay', { onRequestClose: () => toggleLibrary() });
+    else closeDialog('library-overlay');
 }
 
 function populateLibraryFilters() {
@@ -1226,7 +1294,7 @@ function openModal(id, isDownloaded, isTextOnly) {
             actionArea.innerHTML = `<div style="display:flex; gap:10px;"><button class="btn-dl" style="flex:1; margin-top:0;" data-action="download" data-id="${escapeHtml(item.id)}">☁️ Download to Library</button><button class="btn-dl" style="flex:1; margin-top:0;" data-action="download-text" data-id="${escapeHtml(item.id)}">📄 Text Only</button></div>`;
             bindActionButtons(actionArea);
         }
-        document.getElementById('modal-overlay').style.display = 'flex';
+        openDialog('modal-overlay', { onRequestClose: () => closeModal() });
     });
 }
 
@@ -1248,7 +1316,7 @@ function bindActionButtons(container) {
 
 function closeModal(e) {
     if (e && e.target.id !== 'modal-overlay' && !e.target.classList.contains('close-modal')) return;
-    document.getElementById('modal-overlay').style.display = 'none';
+    closeDialog('modal-overlay');
 }
 
 function openConfirmModal({ title, message, confirmLabel = 'Confirm', tone = 'primary', onConfirm, showCancel = true }) {
@@ -1272,19 +1340,18 @@ function openConfirmModal({ title, message, confirmLabel = 'Confirm', tone = 'pr
         xButton.style.display = 'none';
         document.getElementById('confirm-modal-overlay').onclick = null;
     }
-    document.getElementById('confirm-modal-overlay').style.display = 'flex';
-    setTimeout(() => confirmBtn.focus(), 0);
+    openDialog('confirm-modal-overlay', { initialFocus: 'confirm-modal-confirm', allowEscape: showCancel, onRequestClose: () => closeConfirmModal() });
 }
 
 function closeConfirmModal(e) {
     if (e && e.target.id !== 'confirm-modal-overlay' && !e.target.classList.contains('close-modal')) return;
-    document.getElementById('confirm-modal-overlay').style.display = 'none';
+    closeDialog('confirm-modal-overlay');
     pendingConfirmAction = null;
 }
 
 async function applyConfirmModal() {
     const action = pendingConfirmAction;
-    document.getElementById('confirm-modal-overlay').style.display = 'none';
+    closeDialog('confirm-modal-overlay');
     pendingConfirmAction = null;
     if (typeof action === 'function') await action();
 }
@@ -2088,13 +2155,13 @@ function toggleHelp(forceOpen = false) {
         closeHelp();
     } else {
         document.getElementById('help-content').innerHTML = DOMPurify.sanitize(marked.parse(HELP_MARKDOWN));
-        overlay.style.display = 'flex';
+        openDialog('help-overlay', { onRequestClose: () => closeHelp() });
     }
 }
 
 function closeHelp(e) {
     if (e && e.target.id !== 'help-overlay' && !e.target.classList.contains('close-modal')) return;
-    document.getElementById('help-overlay').style.display = 'none';
+    closeDialog('help-overlay');
 }
 
 // Keyboard Shortcuts Listener
@@ -2107,20 +2174,9 @@ document.addEventListener('keydown', (e) => {
         (activeEl && activeEl.closest && activeEl.closest('.toastui-editor-defaultUI'))
     ) return;
     
-    const lib = document.getElementById('library-overlay');
-    const mod = document.getElementById('modal-overlay');
-    const help = document.getElementById('help-overlay');
-    const editorModal = document.getElementById('editor-modal-overlay');
-    const metadataModal = document.getElementById('metadata-modal-overlay');
-    
-    if (
-        (lib && lib.style.display === 'flex') || (mod && mod.style.display === 'flex') ||
-        (help && help.style.display === 'flex') || (editorModal && editorModal.style.display === 'flex') ||
-        (metadataModal && metadataModal.style.display === 'flex')
-    ) {
-        if (e.key === 'Escape') { closeContentEditor(); closeMetadataEditor(); }
-        return;
-    }
+    // While any dialog is open the dialog helper owns the keyboard;
+    // suppress page-navigation shortcuts.
+    if (dialogStack.length > 0) return;
 
     if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') { e.preventDefault(); adjustImgZoom(15); return; }
