@@ -253,16 +253,18 @@ body.editing-active .section-action-btn { display: inline-flex; align-items: cen
 .meta-preview-empty { margin-top: 12px; color: #9aa0a6; font-size: 12px; }
 
 /* --- RIGHT SIDEBAR: SEARCH & BOOKMARKS --- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .sidebar { width: 340px; height: 100%; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 .sidebar.collapsed { display: none; }
 .sidebar-tabs { display: flex; background: #111; }
-.tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-size: 11px; font-weight: bold; opacity: 0.5; color: white; }
+.tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-size: 11px; font-weight: bold; opacity: 0.5; color: white; background: transparent; border: none; font-family: inherit; }
 .tab.active { opacity: 1; border-bottom: 2px solid var(--accent); background: #222; }
 .sidebar-content { flex-grow: 1; overflow-y: auto; padding: 15px; }
 
-.result-item { padding: 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; cursor: pointer; font-size: 13px; position: relative; }
+.result-item { padding: 0; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; cursor: pointer; font-size: 13px; position: relative; }
+.result-item-main { display: block; width: 100%; text-align: left; background: none; border: none; color: inherit; font: inherit; font-size: 13px; padding: 12px; cursor: pointer; border-radius: 6px; }
 .result-item:hover { background: var(--box); }
-.del-bk { position: absolute; top: 10px; right: 10px; opacity: 0.4; cursor: pointer; }
+.del-bk { position: absolute; top: 10px; right: 10px; opacity: 0.4; cursor: pointer; background: none; border: none; font-size: inherit; padding: 0; }
 .del-bk:hover { opacity: 1; color: #ff4d4d; }
 mark { background: #fde68a; color: #000; border-radius: 2px; font-weight: bold; padding: 0 2px; }
 
@@ -345,7 +347,7 @@ select, input[type=number], input[type=text] {
 .modal-left { width: 220px; background: #111; flex-shrink: 0; }
 .modal-left img { width: 100%; height: 100%; object-fit: cover; }
 .modal-right { padding: 30px; flex: 1; position: relative; display: flex; flex-direction: column; }
-.close-modal { position: absolute; top: 15px; right: 20px; cursor: pointer; color: #888; font-size: 24px; font-weight: bold; }
+.close-modal { position: absolute; top: 15px; right: 20px; cursor: pointer; color: #888; font-size: 24px; font-weight: bold; background: none; border: none; padding: 0; font-family: inherit; line-height: 1; }
 .close-modal:hover { color: white; }
 
 .modal-btn { border: none; border-radius: 999px; padding: 9px 16px; cursor: pointer; font-size: 12px; font-weight: 700; }
@@ -377,7 +379,7 @@ select, input[type=number], input[type=text] {
 }
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 25px; padding: 40px; }
 .lib-mag-list { display: flex; flex-wrap: wrap; gap: 15px; padding: 40px; align-content: flex-start; }
-.mag-list-item { background: var(--panel); border: 1px solid var(--border); padding: 12px 24px; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: bold; color: var(--accent); transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+.mag-list-item { background: var(--panel); border: 1px solid var(--border); padding: 12px 24px; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: bold; color: var(--accent); transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-family: inherit; }
 .mag-list-item:hover { background: var(--accent); color: #202124; transform: translateY(-2px); }
 .lib-card { background: var(--panel); border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; position: relative; border: 1px solid var(--border); }
 .lib-card:hover { transform: scale(1.05); box-shadow: 0 10px 20px rgba(0,0,0,0.5); border-color: var(--accent); }

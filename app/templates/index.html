@@ -37,7 +37,7 @@
                     
                     <div id="zone-selected-tools" style="display:none; margin-top: 10px;">
                         <span style="font-size:11px; color:#9aa0a6;">Linked Transcribed Text:</span>
-                        <textarea id="zone-text-input" oninput="updateSelectedZoneText()" placeholder="Type or paste the exact transcribed text from the editor here..."></textarea>
+                        <textarea id="zone-text-input" aria-label="Linked transcribed text" oninput="updateSelectedZoneText()" placeholder="Type or paste the exact transcribed text from the editor here..."></textarea>
                         <div style="display:flex; gap:5px; margin-bottom:5px;">
                             <button class="ctrl-btn" style="background:#ff9800; color:#000; flex:1;" onclick="splitSelectedZone()">✂️ Split Box</button>
                             <button class="ctrl-btn" style="background:#dc3545; flex:1;" onclick="deleteSelectedZone()">🗑️ Delete</button>
@@ -67,7 +67,7 @@
                     </div>
                 </div>
                 <div id="jp-box" class="content-box"></div>
-                <textarea id="jp-edit" class="edit-area" rows="12"></textarea>
+                <textarea id="jp-edit" class="edit-area" rows="12" aria-label="Edit transcription"></textarea>
             </div>
             
             <!-- Translation Section -->
@@ -79,7 +79,7 @@
                     </div>
                 </div>
                 <div id="en-box" class="content-box"></div>
-                <textarea id="en-edit" class="edit-area" rows="12"></textarea>
+                <textarea id="en-edit" class="edit-area" rows="12" aria-label="Edit translation"></textarea>
             </div>
             
             <!-- Summary Section -->
@@ -91,7 +91,7 @@
                     </div>
                 </div>
                 <div id="synopsis-box" class="content-box"></div>
-                <textarea id="sum-edit" class="edit-area" rows="6"></textarea>
+                <textarea id="sum-edit" class="edit-area" rows="6" aria-label="Edit page summary"></textarea>
             </div>
             
             <!-- Metadata Section (Applies to entire issue) -->
@@ -115,23 +115,23 @@
 
         <!-- RIGHT SIDEBAR: Search & Bookmarks -->
         <div id="sidebar" class="sidebar collapsed">
-            <div class="sidebar-tabs">
-                <div id="tab-search" class="tab active" onclick="showTab('search')">SEARCH</div>
-                <div id="tab-bookmarks" class="tab" onclick="showTab('bookmarks')">BOOKMARKS</div>
+            <div class="sidebar-tabs" role="tablist" aria-label="Sidebar panels">
+                <button id="tab-search" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-search" onclick="showTab('search')">SEARCH</button>
+                <button id="tab-bookmarks" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-bookmarks" onclick="showTab('bookmarks')">BOOKMARKS</button>
             </div>
             
             <!-- Search Panel -->
-            <div id="panel-search" class="sidebar-content">
-                <input type="text" id="search-in" style="width:100%; margin-bottom:10px;" placeholder='Search term...'>
+            <div id="panel-search" class="sidebar-content" role="tabpanel" aria-labelledby="tab-search">
+                <input type="text" id="search-in" aria-label="Search term" style="width:100%; margin-bottom:10px;" placeholder='Search term...'>
                 
-                <input type="text" id="search-mag" list="mag-datalist" style="width:100%; margin-bottom:10px; box-sizing:border-box;" placeholder='Filter by Magazine Name...'>
+                <input type="text" id="search-mag" aria-label="Filter by magazine name" list="mag-datalist" style="width:100%; margin-bottom:10px; box-sizing:border-box;" placeholder='Filter by Magazine Name...'>
                 <datalist id="mag-datalist"></datalist>
                 
-                <input type="text" id="search-tags" style="width:100%; margin-bottom:10px; box-sizing:border-box;" placeholder='Filter by Tags (comma separated)...'>
+                <input type="text" id="search-tags" aria-label="Filter by tags" style="width:100%; margin-bottom:10px; box-sizing:border-box;" placeholder='Filter by Tags (comma separated)...'>
 
                 <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" id="search-date-start" style="width:50%; box-sizing:border-box;" placeholder='Start Date' title="e.g., 1999, 1999/10, 10-31-99" onblur="formatSearchDate(this, 'start')">
-                    <input type="text" id="search-date-end" style="width:50%; box-sizing:border-box;" placeholder='End Date' title="e.g., 1999, 1999/10, 10-31-99" onblur="formatSearchDate(this, 'end')">
+                    <input type="text" id="search-date-start" aria-label="Start date" style="width:50%; box-sizing:border-box;" placeholder='Start Date' title="e.g., 1999, 1999/10, 10-31-99" onblur="formatSearchDate(this, 'start')">
+                    <input type="text" id="search-date-end" aria-label="End date" style="width:50%; box-sizing:border-box;" placeholder='End Date' title="e.g., 1999, 1999/10, 10-31-99" onblur="formatSearchDate(this, 'end')">
                 </div>
 
                 <div style="display:flex; flex-direction:column; gap:8px; border-bottom:1px solid var(--border); padding-bottom:12px;">
@@ -155,12 +155,13 @@
                     </details>
                 </div>
                 
+                <div id="search-status" class="sr-only" role="status" aria-live="polite"></div>
                 <div id="search-results" style="margin-top:15px;"></div>
             </div>
             
             <!-- Bookmarks Panel -->
-            <div id="panel-bookmarks" class="sidebar-content" style="display:none;">
-                <input type="text" id="bk-filter" style="width:100%; margin-bottom:15px;" placeholder="Filter tags..." onkeyup="renderBookmarks()">
+            <div id="panel-bookmarks" class="sidebar-content" role="tabpanel" aria-labelledby="tab-bookmarks" style="display:none;">
+                <input type="text" id="bk-filter" aria-label="Filter bookmarks by tag" style="width:100%; margin-bottom:15px;" placeholder="Filter tags..." onkeyup="renderBookmarks()">
                 <div id="bookmark-list"></div>
             </div>
         </div>
@@ -184,29 +185,29 @@
             
             <div class="lib-filter-bar" style="gap:10px; font-size:13px;">
                 <div class="filter-input-wrap">
-                    <input type="text" id="lib-filter-mag" list="lib-mag-datalist" placeholder="Magazine Name" oninput="syncLibraryMagazineFilterUi(); filterLibrary()">
+                    <input type="text" id="lib-filter-mag" aria-label="Filter by magazine name" list="lib-mag-datalist" placeholder="Magazine Name" oninput="syncLibraryMagazineFilterUi(); filterLibrary()">
                     <button id="lib-filter-mag-clear" class="filter-clear-btn" type="button" aria-label="Clear magazine filter" onclick="clearLibraryMagazineFilter()">×</button>
                 </div>
                 <datalist id="lib-mag-datalist"></datalist>
 
-                <input type="text" id="lib-filter-pub" list="lib-pub-datalist" style="width:140px; box-sizing:border-box;" placeholder="Publisher" onkeyup="filterLibrary()">
+                <input type="text" id="lib-filter-pub" aria-label="Filter by publisher" list="lib-pub-datalist" style="width:140px; box-sizing:border-box;" placeholder="Publisher" onkeyup="filterLibrary()">
                 <datalist id="lib-pub-datalist"></datalist>
 
-                <input type="text" id="lib-filter-media" list="lib-media-datalist" style="width:110px; box-sizing:border-box;" placeholder="Media Type" onkeyup="filterLibrary()">
+                <input type="text" id="lib-filter-media" aria-label="Filter by media type" list="lib-media-datalist" style="width:110px; box-sizing:border-box;" placeholder="Media Type" onkeyup="filterLibrary()">
                 <datalist id="lib-media-datalist"></datalist>
 
-                <input type="text" id="lib-filter-tags" list="lib-tags-datalist" style="width:120px; box-sizing:border-box;" placeholder="Subject Tags" onkeyup="filterLibrary()">
+                <input type="text" id="lib-filter-tags" aria-label="Filter by subject tags" list="lib-tags-datalist" style="width:120px; box-sizing:border-box;" placeholder="Subject Tags" onkeyup="filterLibrary()">
                 <datalist id="lib-tags-datalist"></datalist>
 
-                <input type="text" id="lib-filter-orig" list="lib-orig-datalist" style="width:100px; box-sizing:border-box;" placeholder="Original Language" onkeyup="filterLibrary()">
+                <input type="text" id="lib-filter-orig" aria-label="Filter by original language" list="lib-orig-datalist" style="width:100px; box-sizing:border-box;" placeholder="Original Language" onkeyup="filterLibrary()">
                 <datalist id="lib-orig-datalist"></datalist>
 
-                <input type="text" id="lib-filter-trans" list="lib-trans-datalist" style="width:105px; box-sizing:border-box;" placeholder="Translated Language" onkeyup="filterLibrary()">
+                <input type="text" id="lib-filter-trans" aria-label="Filter by translated language" list="lib-trans-datalist" style="width:105px; box-sizing:border-box;" placeholder="Translated Language" onkeyup="filterLibrary()">
                 <datalist id="lib-trans-datalist"></datalist>
 
                 <div style="display:flex; gap:5px;">
-                    <input type="text" id="lib-date-start" style="width:95px; box-sizing:border-box;" placeholder="Start Date" onblur="formatSearchDate(this, 'start'); filterLibrary()" onkeypress="if(event.key==='Enter'){formatSearchDate(this, 'start'); filterLibrary();}">
-                    <input type="text" id="lib-date-end" style="width:95px; box-sizing:border-box;" placeholder="End Date" onblur="formatSearchDate(this, 'end'); filterLibrary()" onkeypress="if(event.key==='Enter'){formatSearchDate(this, 'end'); filterLibrary();}">
+                    <input type="text" id="lib-date-start" aria-label="Start date" style="width:95px; box-sizing:border-box;" placeholder="Start Date" onblur="formatSearchDate(this, 'start'); filterLibrary()" onkeypress="if(event.key==='Enter'){formatSearchDate(this, 'start'); filterLibrary();}">
+                    <input type="text" id="lib-date-end" aria-label="End date" style="width:95px; box-sizing:border-box;" placeholder="End Date" onblur="formatSearchDate(this, 'end'); filterLibrary()" onkeypress="if(event.key==='Enter'){formatSearchDate(this, 'end'); filterLibrary();}">
                 </div>
                 
                 <div style="display:flex; gap:10px; margin-left:auto;">
@@ -226,11 +227,12 @@
                 <img id="modal-cover" src="" alt="Magazine Cover">
             </div>
             <div class="modal-right">
-                <span class="close-modal" onclick="closeModal(event)">&times;</span>
+                <button class="close-modal" type="button" aria-label="Close" onclick="closeModal(event)">&times;</button>
                 <h2 id="modal-title" style="margin-top:0; margin-bottom:5px; color:var(--accent); font-size:22px;"></h2>
                 <div id="modal-meta" style="font-size:13px; color:#9aa0a6; margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:15px;"></div>
                 <div id="modal-desc" style="font-size:14px; line-height:1.6; margin-bottom:20px;"></div>
                 <div id="modal-action-area" style="margin-top:auto;"></div>
+                <div id="dl-live" class="sr-only" role="status" aria-live="polite"></div>
             </div>
         </div>
     </div>
@@ -240,7 +242,7 @@
         <div class="modal-content" onclick="event.stopPropagation()" style="width: 800px; max-height: 80vh; flex-direction: column;">
             <div style="padding: 20px 30px; background: #111; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="margin:0; color:var(--accent);">📖 Help & Credits</h2>
-                <span style="cursor: pointer; color: #888; font-size: 24px; font-weight: bold;" onclick="closeHelp(event)">&times;</span>
+                <button class="close-modal" type="button" aria-label="Close" style="position:static;" onclick="closeHelp(event)">&times;</button>
             </div>
             <div id="help-content" class="content-box markdown-mode" style="margin: 0; border: none; border-radius: 0; overflow-y: auto; flex: 1; padding: 30px; background: var(--panel);">
             </div>
@@ -262,7 +264,7 @@
                         <button id="editor-mode-split" class="editor-mode-btn" type="button" onclick="setContentEditorMode('split')">Split</button>
                     </div>
                 </div>
-                <span class="close-modal" onclick="closeContentEditor(event)">&times;</span>
+                <button class="close-modal" type="button" aria-label="Close" onclick="closeContentEditor(event)">&times;</button>
             </div>
             <div class="editor-modal-body">
                 <div class="editor-hint">Changes apply back to the inline field and save with the existing page-level Save button.</div>
@@ -283,7 +285,7 @@
                     <h2 style="margin:0; color:#fde68a; font-size:22px;">Metadata Editor</h2>
                     <div class="editor-modal-subtitle">Writes back to the existing <code>metadata.txt</code> key/value format.</div>
                 </div>
-                <span class="close-modal" onclick="closeMetadataEditor(event)">&times;</span>
+                <button class="close-modal" type="button" aria-label="Close" onclick="closeMetadataEditor(event)">&times;</button>
             </div>
             <div class="editor-modal-body">
                 <div class="metadata-grid">
@@ -360,7 +362,7 @@
                     <h2 style="margin:0; color:var(--accent); font-size:22px;">Save Bookmark</h2>
                     <div id="bookmark-modal-target" class="bookmark-target"></div>
                 </div>
-                <span class="close-modal" onclick="closeBookmarkModal(event)">&times;</span>
+                <button class="close-modal" type="button" aria-label="Close" onclick="closeBookmarkModal(event)">&times;</button>
             </div>
             <div class="bookmark-modal-body">
                 <div class="bookmark-modal-copy">Add tags to make this page easier to find later in the Bookmarks tab.</div>
@@ -383,7 +385,7 @@
                 <div>
                     <h2 id="confirm-modal-title" style="margin:0; color:var(--accent); font-size:22px;">Confirm Action</h2>
                 </div>
-                <span class="close-modal" onclick="closeConfirmModal(event)">&times;</span>
+                <button class="close-modal" type="button" aria-label="Close" onclick="closeConfirmModal(event)">&times;</button>
             </div>
             <div class="confirm-modal-body">
                 <div id="confirm-modal-message" class="confirm-modal-message"></div>
@@ -401,8 +403,8 @@
     <div class="controls">
 
         <div class="controls-group" data-id="group-mag">
-            <span class="drag-handle" title="Drag to move">⋮⋮</span>
-            <input type="text" id="mag-input" list="mag-select-list" placeholder="Select Magazine..." onclick="this.select()">
+            <span class="drag-handle" aria-hidden="true" title="Drag to move">⋮⋮</span>
+            <input type="text" id="mag-input" aria-label="Select magazine" list="mag-select-list" placeholder="Select Magazine..." onclick="this.select()">
             <datalist id="mag-select-list"></datalist>
             <select id="mag-select" style="display:none;"></select>
         </div>
@@ -410,16 +412,16 @@
         <div class="divider"></div>
 
         <div class="controls-group" data-id="group-nav">
-            <span class="drag-handle" title="Drag to move">⋮⋮</span>
+            <span class="drag-handle" aria-hidden="true" title="Drag to move">⋮⋮</span>
             <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
-            <input type="number" id="page-num" value="1" min="1" style="width: 45px; text-align: center;">
+            <input type="number" id="page-num" aria-label="Page number" value="1" min="1" style="width: 45px; text-align: center;">
             <button class="ctrl-btn" onclick="changePage(1)">Next</button>
         </div>
 
         <div class="divider"></div>
 
         <div class="controls-group" data-id="group-sections">
-            <span class="drag-handle" title="Drag to move">⋮⋮</span>
+            <span class="drag-handle" aria-hidden="true" title="Drag to move">⋮⋮</span>
             <label class="check-item"><input type="checkbox" id="check-jp" checked onchange="toggleSec('sec-jp-container', this.checked)"> Transcription</label>
             <label class="check-item"><input type="checkbox" id="check-en" checked onchange="toggleSec('sec-en-container', this.checked)"> Translation</label>
             <label class="check-item"><input type="checkbox" id="check-sum" checked onchange="toggleSec('sec-sum-container', this.checked)"> Summary</label>
@@ -428,35 +430,35 @@
         <div class="divider"></div>
 
         <div class="controls-group" data-id="group-toggles">
-            <span class="drag-handle" title="Drag to move">⋮⋮</span>
+            <span class="drag-handle" aria-hidden="true" title="Drag to move">⋮⋮</span>
             <button id="zones-btn" class="ctrl-btn" onclick="toggleZones()" title="Toggle Zones">👁️ Zones</button>
             <button id="manga-btn" class="ctrl-btn" onclick="toggleMangaMode()" title="Manga Mode">💬 Manga</button>
-            <button id="md-toggle" class="ctrl-btn active" onclick="toggleMarkdown()">MD</button>
+            <button id="md-toggle" class="ctrl-btn active" aria-label="Toggle markdown formatting" onclick="toggleMarkdown()">MD</button>
             <button id="edit-btn" class="ctrl-btn" onclick="toggleEdit()">✏️ Edit</button>
-            <button id="save-btn" class="ctrl-btn" style="display:none; background:#28a745;" onclick="saveCorrections()">💾 Save</button>
-            <button id="bookmark-btn" class="ctrl-btn" onclick="toggleBookmark()">⭐</button>
+            <button id="save-btn" class="ctrl-btn" aria-live="polite" style="display:none; background:#28a745;" onclick="saveCorrections()">💾 Save</button>
+            <button id="bookmark-btn" class="ctrl-btn" aria-label="Bookmark this page" onclick="toggleBookmark()">⭐</button>
         </div>
 
         <div class="divider"></div>
 
         <div class="controls-group" data-id="group-zoom">
-            <span class="drag-handle" title="Drag to move">⋮⋮</span>
-            <button class="ctrl-btn" onclick="adjustImgZoom(-15)">🔍-</button>
-            <input type="text" id="zoom-input" value="100%" title="Zoom level — type a % and press Enter" style="width: 40px; text-align: center; font-size: 11px; background: transparent; border: none; color: #9aa0a6;">
-            <button class="ctrl-btn" onclick="adjustImgZoom(15)">🔍+</button>
+            <span class="drag-handle" aria-hidden="true" title="Drag to move">⋮⋮</span>
+            <button class="ctrl-btn" aria-label="Zoom out" onclick="adjustImgZoom(-15)">🔍-</button>
+            <input type="text" id="zoom-input" aria-label="Zoom percentage" value="100%" title="Zoom level — type a % and press Enter" style="width: 40px; text-align: center; font-size: 11px; background: transparent; border: none; color: #9aa0a6;">
+            <button class="ctrl-btn" aria-label="Zoom in" onclick="adjustImgZoom(15)">🔍+</button>
             <div class="divider"></div>
             <span style="font-size: 11px; color: #9aa0a6;">Font</span>
-            <input type="range" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
+            <input type="range" aria-label="Text size" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
         </div>
 
         <div class="divider"></div>
 
         <div class="controls-group" data-id="group-tools">
-            <span class="drag-handle" title="Drag to move">⋮⋮</span>
+            <span class="drag-handle" aria-hidden="true" title="Drag to move">⋮⋮</span>
             <button id="lib-btn" class="ctrl-btn" onclick="toggleLibrary()">📚 Library</button>
             <button id="sidebar-toggle" class="ctrl-btn" onclick="toggleSidebar()">🔍 Search</button>
             <button id="help-btn" class="ctrl-btn" onclick="toggleHelp()">❓ Help</button>
-            <button id="theme-btn" class="ctrl-btn" onclick="toggleTheme()">☀️</button>
+            <button id="theme-btn" class="ctrl-btn" aria-label="Toggle light or dark theme" onclick="toggleTheme()">☀️</button>
         </div>
 
     </div>
