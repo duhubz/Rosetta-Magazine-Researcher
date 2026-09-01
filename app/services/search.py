@@ -261,8 +261,5 @@ def _matches_sections(
         def term_to_regex(term: str) -> str:
             return re.escape(term.lower()).replace(r"\*", ".*")
 
-        for grp in or_groups:
-            if all(re.search(term_to_regex(t), blob) for t in grp):
-                return True
-        return False
+        return any(all(re.search(term_to_regex(t), blob) for t in grp) for grp in or_groups)
     return True

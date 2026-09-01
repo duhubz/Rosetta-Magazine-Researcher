@@ -37,7 +37,7 @@ def test_concurrent_reload_and_iteration(workspace):
             try:
                 # Snapshot-style iteration, as used in search.py / api.py
                 snapshot = list(state.METADATA_CACHE.items())
-                for rel_path, meta in snapshot:
+                for _rel_path, meta in snapshot:
                     meta.get("name")
                 # Repeated lookups against the (possibly swapped) global
                 cache = state.METADATA_CACHE

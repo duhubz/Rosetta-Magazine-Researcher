@@ -3,15 +3,18 @@ Metadata Service
 Handles parsing, caching, and retrieval of magazine metadata and transcription text.
 """
 
+import logging
 import re
 import zipfile
 from pathlib import Path
 from typing import Any
 
 import app.config as cfg
-from app.services import state
+from app.services import state, zip_utils
 from app.services.text_utils import split_pages
 from app.utils import has_hidden_component
+
+logger = logging.getLogger(__name__)
 
 
 def parse_metadata(text: str) -> dict[str, str]:
@@ -94,6 +97,29 @@ def get_partner_zip(pdf_rel_path: str) -> Path | None:
     return None
 
 
+def read_raw_metadata(pdf_path: Path, partner_zip: Path | None) -> str:
+    """
+    Returns the raw metadata.txt content for a magazine ('' when absent).
+
+    Reads from the partner ZIP when present, otherwise from the loose
+    '<stem>.metadata.txt' file next to the PDF.
+    """
+    if partner_zip:
+        try:
+            with zipfile.ZipFile(partner_zip, "r") as z:
+                meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
+                if meta_file:
+                    return z.read(meta_file).decode("utf-8", errors="ignore")
+        except Exception as e:
+            logger.warning("Could not read metadata.txt from %s: %s", partner_zip, e)
+        return ""
+
+    loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
+    if loose_meta.exists():
+        return loose_meta.read_text(encoding="utf-8", errors="ignore")
+    return ""
+
+
 def load_metadata_cache() -> None:
     """
     Scans the data directory and populates the global METADATA_CACHE.
@@ -116,14 +142,13 @@ def load_metadata_cache() -> None:
         if partner_zip:
             try:
                 with zipfile.ZipFile(partner_zip, "r") as z:
-                    meta_file = next(
-                        (n for n in z.namelist() if n.split("/")[-1].lower() == "metadata.txt"),
-                        None,
-                    )
+                    meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
                     if meta_file:
                         meta = parse_metadata(z.read(meta_file).decode("utf-8", errors="ignore"))
-            except Exception:
-                pass
+            except Exception as e:
+                # Corrupt/unreadable partner ZIP: the magazine still lists,
+                # but without its ZIP metadata. Surface it for the user.
+                logger.warning("Could not read metadata from %s: %s", partner_zip, e)
 
         # Overlay loose files (they take priority over ZIP content)
         loose_meta = pdf.with_name(pdf.stem + ".metadata.txt")
@@ -162,14 +187,7 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
                 # Check for Master File in ZIP
-                master_zname = next(
-                    (
-                        n
-                        for n in z.namelist()
-                        if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()
-                    ),
-                    None,
-                )
+                master_zname = zip_utils.find_member_by_basename(z, f"{pdf_path.stem}_COMPLETE.txt")
                 if master_zname:
                     pages = get_pages_from_master(
                         z.read(master_zname).decode("utf-8", errors="ignore")
@@ -184,8 +202,9 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
                 for zname in z.namelist():
                     if pattern.search(zname.split("/")[-1]):
                         return z.read(zname).decode("utf-8", errors="ignore")
-        except Exception:
-            pass
+        except Exception as e:
+            # Fall through to loose files, but record why the ZIP was skipped.
+            logger.warning("Could not read transcription from %s: %s", partner_zip, e)
 
     # 2. Check loose Master File
     master_file = pdf_path.parent / f"{pdf_path.stem}_COMPLETE.txt"

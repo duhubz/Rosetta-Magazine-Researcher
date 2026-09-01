@@ -16,11 +16,7 @@ exclude = [
 # catches real problems without a style-enforcement crusade.
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 # E501: line length is handled by the formatter; don't double-report it.
-# TODO(follow-up lint PR): the codes below flag 18 pre-existing spots that
-# need manual refactors (contextlib.suppress, combined with-statements, etc.).
-# They are ignored for now so the CI gate stays green; re-enable one at a
-# time in a dedicated cleanup PR: SIM105, SIM108, SIM110, SIM117, B007.
-ignore = ["E501", "SIM105", "SIM108", "SIM110", "SIM117", "B007"]
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 # Allow `assert False`-style idioms in tests.
