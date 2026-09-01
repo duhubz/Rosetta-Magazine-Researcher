@@ -88,13 +88,15 @@ def _decode_node_key(
     )
 
 
-def _api_get_file_info(handle: str) -> dict:
+def _api_get_file_info(handle: str, *, allow_any_host: bool = False) -> dict:
+    """Fetch public Mega file metadata."""
     body = json.dumps([{"a": "g", "g": 1, "p": handle}]).encode()
     response = safe_urlopen(
         MEGA_API_URL + "?id=0",
         timeout=cfg.download_timeout(),
         data=body,
         headers={"Content-Type": "application/json"},
+        allow_any_host=allow_any_host,
     )
     resp = json.loads(response.read())
     if isinstance(resp, int):
@@ -132,11 +134,12 @@ def download_public_file(
     *,
     progress_cb: Callable[[int, int], None] | None = None,
     should_abort: Callable[[], bool] | None = None,
+    allow_any_host: bool = False,
 ) -> str:
     """Download, decrypt, authenticate, and atomically install a Mega file."""
     handle, key_b64 = parse_share_url(url)
     k, iv, meta_mac = _decode_node_key(key_b64)
-    info = _api_get_file_info(handle)
+    info = _api_get_file_info(handle, allow_any_host=allow_any_host)
     attrs = _decrypt_attrs(info["at"], k)
     size = int(info["s"])
     out_path = Path(out_path)
@@ -152,7 +155,9 @@ def download_public_file(
             mac_encryptor = AES.new(k_str, AES.MODE_CBC, b"\0" * 16)
             iv_str = _a32_to_str((iv[0], iv[1], iv[0], iv[1]))
             mac_str = b"\0" * 16
-            response = safe_urlopen(info["g"], timeout=cfg.download_timeout())
+            response = safe_urlopen(
+                info["g"], timeout=cfg.download_timeout(), allow_any_host=allow_any_host
+            )
             done = 0
             for _chunk_start, chunk_size in _get_chunks(size):
                 raw = bytearray()

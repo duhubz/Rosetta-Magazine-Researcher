@@ -30,6 +30,10 @@ DEFAULT_ALLOWED_FETCH_HOSTS = [
     "www.gamingalexandria.com",
     "archive.org",
     "*.archive.org",
+    "mega.nz",
+    "mega.io",
+    "mega.co.nz",
+    "*.mega.co.nz",
 ]
 
 

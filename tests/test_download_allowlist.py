@@ -144,6 +144,96 @@ def test_bypass_flag_allows_any_host_but_not_file(workspace, fetched_urls, monke
     assert "scheme not http/https" in caplog.text
 
 
+def test_mega_source_dispatches_to_mega_provider(workspace, monkeypatch):
+    out = workspace / "Magazines" / "out.pdf"
+    _seed_task("t_mega")
+    calls = []
+
+    def fake_download(url, out_path, **kwargs):
+        calls.append((url, out_path, kwargs))
+        out_path.write_bytes(PDF_BYTES)
+
+    monkeypatch.setattr(download.mega_download, "download_public_file", fake_download)
+
+    assert download.download_waterfall(
+        "t_mega", out, ["https://mega.nz/file/HANDLE#SOMEKEY"], "PDF"
+    )
+    assert out.read_bytes() == PDF_BYTES
+    assert len(calls) == 1
+    assert calls[0][0] == "https://mega.nz/file/HANDLE#SOMEKEY"
+    assert calls[0][1] == out
+    assert callable(calls[0][2]["should_abort"])
+    assert callable(calls[0][2]["progress_cb"])
+    assert calls[0][2]["allow_any_host"] is False
+    assert "via Mega" in state.DOWNLOAD_STATE["t_mega"]["status"]
+
+
+def test_mega_source_blocked_when_hosts_removed(workspace, monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "allowed_fetch_hosts", lambda: ["archive.org"])
+
+    def fail_download(*args, **kwargs):
+        pytest.fail("Mega provider should not be called")
+
+    monkeypatch.setattr(download.mega_download, "download_public_file", fail_download)
+    out = workspace / "Magazines" / "out.pdf"
+    _seed_task("t_mega_blocked")
+    with caplog.at_level(logging.WARNING):
+        assert not download.download_waterfall(
+            "t_mega_blocked", out, ["https://mega.nz/file/HANDLE#SOMEKEY"], "PDF"
+        )
+    assert state.DOWNLOAD_STATE["t_mega_blocked"]["error"]
+    assert "SOMEKEY" not in caplog.text
+
+
+def test_mega_source_allowed_any_host_bypasses_allowlist(workspace, monkeypatch):
+    monkeypatch.setattr(cfg, "allowed_fetch_hosts", lambda: ["archive.org"])
+    monkeypatch.setattr(cfg, "allow_downloads_from_any_host", lambda: True)
+    calls = []
+
+    def fake_download(url, out_path, **kwargs):
+        calls.append(kwargs)
+        out_path.write_bytes(PDF_BYTES)
+
+    monkeypatch.setattr(download.mega_download, "download_public_file", fake_download)
+    out = workspace / "Magazines" / "out.pdf"
+    _seed_task("t_mega_any")
+    assert download.download_waterfall(
+        "t_mega_any", out, ["https://mega.nz/file/HANDLE#SOMEKEY"], "PDF"
+    )
+    assert calls[0]["allow_any_host"] is True
+
+
+def test_mega_failure_falls_through_to_next_mirror(workspace, fetched_urls, monkeypatch):
+    def fail_download(*args, **kwargs):
+        raise RuntimeError("failed")
+
+    monkeypatch.setattr(download.mega_download, "download_public_file", fail_download)
+    out = workspace / "Magazines" / "out.pdf"
+    _seed_task("t_mega_fallback")
+    assert download.download_waterfall(
+        "t_mega_fallback",
+        out,
+        ["https://mega.nz/file/HANDLE#SOMEKEY", "https://archive.org/download/item/x.pdf"],
+        "PDF",
+    )
+    assert out.read_bytes() == PDF_BYTES
+
+
+def test_mega_progress_callback_updates_state(workspace, monkeypatch):
+    def fake_download(url, out_path, **kwargs):
+        kwargs["progress_cb"](50, 200)
+        kwargs["progress_cb"](200, 200)
+        out_path.write_bytes(PDF_BYTES)
+
+    monkeypatch.setattr(download.mega_download, "download_public_file", fake_download)
+    out = workspace / "Magazines" / "out.pdf"
+    _seed_task("t_mega_progress")
+    assert download.download_waterfall(
+        "t_mega_progress", out, ["https://mega.nz/file/HANDLE#SOMEKEY"], "PDF"
+    )
+    assert state.DOWNLOAD_STATE["t_mega_progress"]["progress"] == 100
+
+
 # --- worker-level (end state) behavior ------------------------------------------
 
 

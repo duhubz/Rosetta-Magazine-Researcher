@@ -161,6 +161,39 @@ def test_download_roundtrip(vector, tmp_path, monkeypatch):
     assert all(url.startswith(mega.MEGA_API_URL) or url == download_url for url in fake.calls)
 
 
+def test_allow_any_host_forwarded(tmp_path, monkeypatch):
+    vector = VECTORS[0]
+    ciphertext = _encrypt(vector["plain"], vector["k"], vector["iv"])
+    calls = []
+
+    def fake(url, **kwargs):
+        calls.append(kwargs)
+        if url.startswith(mega.MEGA_API_URL):
+            return _FakeResponse(
+                json.dumps(
+                    [{"g": DOWNLOAD_URL, "s": len(vector["plain"]), "at": vector["at"]}]
+                ).encode()
+            )
+        if url == DOWNLOAD_URL:
+            return _FakeResponse(ciphertext)
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(mega, "safe_urlopen", fake)
+    mega.download_public_file(
+        f"https://mega.nz/file/HANDLE#{vector['key']}",
+        tmp_path / "allow",
+        allow_any_host=True,
+    )
+    assert all(call.get("allow_any_host") is True for call in calls)
+
+    calls.clear()
+    mega.download_public_file(
+        f"https://mega.nz/file/HANDLE#{vector['key']}",
+        tmp_path / "default",
+    )
+    assert all(not call.get("allow_any_host", False) for call in calls)
+
+
 def test_download_mac_mismatch(tmp_path, monkeypatch):
     vector = VECTORS[0]
     ciphertext = bytearray(_encrypt(vector["plain"], vector["k"], vector["iv"]))

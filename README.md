@@ -226,6 +226,14 @@ Best for translation groups or creators who continuously release updates.
 
 The PDFs and ZIPs are downloaded from the URLs in `pdf_sources` and `zip_sources` (defined in the catalog by the publisher). If either are empty or missing, the app skips them. The app tries each URL in order until one succeeds, so catalog authors can list backup mirrors.
 
+Public Mega file links are also supported in `pdf_sources` and `zip_sources`:
+
+~~~json
+"pdf_sources": ["https://mega.nz/file/FILE_ID#DECRYPTION_KEY"]
+~~~
+
+Mega downloads are handled natively (anonymous public shares only — no account, no Mega SDK): the app fetches the file through Mega's public API, decrypts it on the fly, and verifies the file's integrity checksum before installing it. The decryption key is part of the share URL, so treat catalog files containing Mega links as sensitive. Mega's API and storage hosts ship in the default `security.allowed_fetch_hosts`; remove them there to disable Mega downloads.
+
 ---
 
 ## ⚙️ Configuration (`config.yaml`)
