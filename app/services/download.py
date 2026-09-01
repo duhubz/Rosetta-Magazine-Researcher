@@ -144,17 +144,17 @@ def _cleanup_temp_dir(temp_dir: Path) -> None:
         logger.debug("Could not remove temp dir %s: %s", temp_dir, e)
 
 
-def download_worker(task_id: str, item: dict[str, Any]) -> None:
+def download_worker(task_id: str, item: dict[str, Any], mode: str = "full") -> None:
     """Entry point for the background download thread.
 
     Marks the whole install as a write-in-progress section so the idle
     shutdown monitor won't kill the process mid-install.
     """
     with state.write_in_progress():
-        _download_worker_impl(task_id, item)
+        _download_worker_impl(task_id, item, mode)
 
 
-def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
+def _download_worker_impl(task_id: str, item: dict[str, Any], mode: str = "full") -> None:
     """
     Background worker thread for downloading and installing a magazine.
 
@@ -192,16 +192,28 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     zip_temp = temp_dir / zip_filename
 
     # Step 1: Check Local PDF availability
-    cache = state.METADATA_CACHE
-    existing_rel_path = next((f for f in list(cache.keys()) if Path(f).name == pdf_filename), None)
-    existing_pdf_path = (data_dir / existing_rel_path) if existing_rel_path else None
-
-    if existing_pdf_path and existing_pdf_path.exists():
-        state.DOWNLOAD_STATE[task_id]["status"] = "PDF found locally. Skipping download..."
-        shutil.copy2(existing_pdf_path, pdf_temp)
+    if mode == "text":
+        if not item.get("zip_sources"):
+            state.DOWNLOAD_STATE[task_id]["error"] = (
+                "This catalog entry has no transcription data ZIP."
+            )
+            state.DOWNLOAD_STATE[task_id]["done"] = True
+            _cleanup_temp_dir(temp_dir)
+            return
         success_pdf = True
     else:
-        success_pdf = download_waterfall(task_id, pdf_temp, item.get("pdf_sources", []), "PDF")
+        cache = state.METADATA_CACHE
+        existing_rel_path = next(
+            (f for f in list(cache.keys()) if Path(f).name == pdf_filename), None
+        )
+        existing_pdf_path = (data_dir / existing_rel_path) if existing_rel_path else None
+
+        if existing_pdf_path and existing_pdf_path.exists():
+            state.DOWNLOAD_STATE[task_id]["status"] = "PDF found locally. Skipping download..."
+            shutil.copy2(existing_pdf_path, pdf_temp)
+            success_pdf = True
+        else:
+            success_pdf = download_waterfall(task_id, pdf_temp, item.get("pdf_sources", []), "PDF")
 
     if not success_pdf:
         state.DOWNLOAD_STATE[task_id]["done"] = True
@@ -282,6 +294,7 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     ml = []
     for k in [
         "magazine_name",
+        "pdf_filename",
         "publisher",
         "date",
         "issue_name",

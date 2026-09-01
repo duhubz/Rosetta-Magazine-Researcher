@@ -17,13 +17,7 @@ import app.config as cfg
 from app.services import catalog, metadata, rendering, search_index, state, update_check
 from app.services import search as search_svc
 from app.services.text_utils import split_sections
-from app.utils import (
-    URLBlockedError,
-    atomic_write_bytes,
-    get_safe_path,
-    has_hidden_component,
-    safe_urlopen,
-)
+from app.utils import URLBlockedError, atomic_write_bytes, get_safe_path, safe_urlopen
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("api", __name__)
@@ -57,14 +51,8 @@ def ping() -> str:
 @bp.route("/list")
 def list_mags() -> Response:
     """Returns a list of all local PDF magazines and their cached metadata."""
-    data_dir = cfg.data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
     metadata.load_metadata_cache()
-    mags = [
-        p.relative_to(data_dir).as_posix()
-        for p in data_dir.rglob("*.pdf")
-        if not has_hidden_component(p, data_dir)
-    ]
+    mags = list(state.METADATA_CACHE.keys())
     return jsonify({"files": sorted(mags), "metadata": state.METADATA_CACHE})
 
 
@@ -95,6 +83,10 @@ def render_page() -> Response:
         pdf_path = get_safe_path(mag)
     except ValueError as e:
         return jsonify({"error": "Bad request", "detail": str(e)}), 400
+    if not Path(pdf_path).exists():
+        return jsonify(
+            {"error": "no_pdf", "detail": "No PDF installed for this magazine (text-only install)."}
+        ), 404
 
     try:
         img = rendering.render_page_png(pdf_path, pn, zoom)
@@ -125,6 +117,8 @@ def get_text() -> Response:
 
     # Determine total pages for UI constraints (cached document handle)
     total = rendering.get_page_count(pdf_path)
+    if total == 0 and not pdf_path.exists():
+        total = metadata.get_text_page_count(mag_rel_path)
 
     # Split Rosetta format into sections (Transcription, Translation, Summary)
     jp, en, sum_t = "No transcription found.", "", ""

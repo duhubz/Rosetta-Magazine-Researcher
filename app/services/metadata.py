@@ -12,7 +12,7 @@ from typing import Any
 import app.config as cfg
 from app.services import state, zip_utils
 from app.services.text_utils import split_pages
-from app.utils import has_hidden_component
+from app.utils import has_hidden_component, safe_name
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ def parse_metadata(text: str) -> dict[str, str]:
         "tags": "tags",
         "version": "version",
         "notes": "notes",
+        "pdf filename": "pdf_filename",
     }
     for line in text.splitlines():
         if ":" in line:
@@ -70,7 +71,10 @@ def get_pages_from_master(file_text: str) -> dict[int, str]:
 
 def get_partner_zip(pdf_rel_path: str) -> Path | None:
     """
-    Locates the associated ZIP file containing data for a given PDF.
+    Locates the associated ZIP file containing data for a given PDF, including
+    virtual PDF paths used by text-only installs. Resolution checks the exact
+    stem ZIP, the downloader's ``_Data.zip`` name, then a single ZIP in a
+    non-root parent folder.
 
     Args:
         pdf_rel_path: The relative path to the PDF from the Magazines folder.
@@ -80,21 +84,49 @@ def get_partner_zip(pdf_rel_path: str) -> Path | None:
     """
     data_dir = cfg.data_dir()
     pdf_path = data_dir / pdf_rel_path
-    if not pdf_path.exists():
-        return None
-
     # Priority 1: Exact match (MyMag.pdf -> MyMag.zip)
     direct_zip = pdf_path.with_suffix(".zip")
     if direct_zip.exists():
         return direct_zip
 
-    # Priority 2: Single ZIP in the same folder
+    # Priority 2: The default name used by the downloader.
+    default_zip = pdf_path.with_name(pdf_path.stem + "_Data.zip")
+    if default_zip.exists():
+        return default_zip
+
+    # Priority 3: Single ZIP in the same folder
     if pdf_path.parent != data_dir:
         zips_in_folder = list(pdf_path.parent.glob("*.zip"))
         if len(zips_in_folder) == 1:
             return zips_in_folder[0]
 
     return None
+
+
+def _read_zip_metadata(partner_zip: Path | None) -> dict[str, str]:
+    """Read metadata from a ZIP, returning an empty mapping when unavailable."""
+    if not partner_zip:
+        return {}
+    try:
+        with zipfile.ZipFile(partner_zip, "r") as z:
+            meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
+            if meta_file:
+                return parse_metadata(z.read(meta_file).decode("utf-8", errors="ignore"))
+    except Exception as e:
+        logger.warning("Could not read metadata from %s: %s", partner_zip, e)
+    return {}
+
+
+def _load_install_metadata(pdf_path: Path, partner_zip: Path | None) -> dict[str, str]:
+    """Load ZIP metadata and apply the loose metadata precedence rules."""
+    meta = _read_zip_metadata(partner_zip)
+    loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
+    generic_meta = pdf_path.parent / "metadata.txt"
+    if loose_meta.exists():
+        meta.update(parse_metadata(loose_meta.read_text(encoding="utf-8", errors="ignore")))
+    elif generic_meta.exists() and pdf_path.parent != cfg.data_dir():
+        meta.update(parse_metadata(generic_meta.read_text(encoding="utf-8", errors="ignore")))
+    return meta
 
 
 def read_raw_metadata(pdf_path: Path, partner_zip: Path | None) -> str:
@@ -128,6 +160,7 @@ def load_metadata_cache() -> None:
     temp_cache: dict[str, Any] = {}
     data_dir = cfg.data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
+    claimed_zips: set[Path] = set()
 
     for pdf in data_dir.rglob("*.pdf"):
         # Skip dot-directories/files: in-flight '.temp_*' downloads and any
@@ -136,34 +169,85 @@ def load_metadata_cache() -> None:
             continue
         rel_path = pdf.relative_to(data_dir).as_posix()
         partner_zip = get_partner_zip(rel_path)
-        meta: dict[str, str] = {}
-
-        # Load from ZIP if available
         if partner_zip:
+            claimed_zips.add(partner_zip.resolve())
+        meta = _load_install_metadata(pdf, partner_zip)
+
+        temp_cache[rel_path] = meta
+
+    # ZIPs without a PDF are text-only installs keyed by their virtual PDF path.
+    for zf in data_dir.rglob("*.zip"):
+        if has_hidden_component(zf, data_dir) or zf.resolve() in claimed_zips:
+            continue
+        fallback = zf.stem.removesuffix("_Data") + ".pdf"
+        meta = _read_zip_metadata(zf)
+        candidate = meta.get("pdf_filename")
+        if candidate:
             try:
-                with zipfile.ZipFile(partner_zip, "r") as z:
-                    meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
-                    if meta_file:
-                        meta = parse_metadata(z.read(meta_file).decode("utf-8", errors="ignore"))
-            except Exception as e:
-                # Corrupt/unreadable partner ZIP: the magazine still lists,
-                # but without its ZIP metadata. Surface it for the user.
-                logger.warning("Could not read metadata from %s: %s", partner_zip, e)
-
-        # Overlay loose files (they take priority over ZIP content)
-        loose_meta = pdf.with_name(pdf.stem + ".metadata.txt")
-        generic_meta = pdf.parent / "metadata.txt"
-
-        if loose_meta.exists():
-            meta.update(parse_metadata(loose_meta.read_text(encoding="utf-8", errors="ignore")))
-        elif generic_meta.exists() and pdf.parent != data_dir:
-            meta.update(parse_metadata(generic_meta.read_text(encoding="utf-8", errors="ignore")))
-
+                if "/" in candidate or "\\" in candidate:
+                    raise ValueError("PDF filename contains a path separator")
+                virtual_name = safe_name(candidate, fallback)
+            except ValueError:
+                virtual_name = fallback
+        else:
+            virtual_name = fallback
+        virtual_path = zf.parent / virtual_name
+        if virtual_path.exists():
+            continue
+        rel_path = virtual_path.relative_to(data_dir).as_posix()
+        if rel_path in temp_cache:
+            continue
+        meta = _load_install_metadata(virtual_path, zf)
+        meta["text_only"] = "true"
         temp_cache[rel_path] = meta
 
     # Atomic swap: rebinding the global is safe for concurrent readers,
     # whereas clear()+update() would expose a momentarily-empty cache.
     state.METADATA_CACHE = temp_cache
+
+
+def get_text_page_count(pdf_rel_path: str) -> int:
+    """Highest page number found in transcription sources (0 when none).
+
+    Used as the reader's total_pages fallback for text-only installs
+    where no PDF exists to count pages from.
+    """
+    pdf_path = cfg.data_dir() / pdf_rel_path
+    stem = pdf_path.stem
+    highest = 0
+    page_pattern = re.compile(rf"^{re.escape(stem)}_p(\d+)\.txt$", re.IGNORECASE)
+
+    master_path = pdf_path.parent / f"{stem}_COMPLETE.txt"
+    if master_path.exists():
+        highest = max(
+            get_pages_from_master(master_path.read_text(encoding="utf-8", errors="ignore")),
+            default=0,
+        )
+    for loose in pdf_path.parent.glob(f"{stem}_p*.txt"):
+        match = page_pattern.match(loose.name)
+        if match:
+            highest = max(highest, int(match.group(1)))
+
+    partner_zip = get_partner_zip(pdf_rel_path)
+    if partner_zip:
+        try:
+            with zipfile.ZipFile(partner_zip, "r") as z:
+                master = zip_utils.find_member_by_basename(z, f"{stem}_COMPLETE.txt")
+                if master:
+                    highest = max(
+                        highest,
+                        max(
+                            get_pages_from_master(z.read(master).decode("utf-8", errors="ignore")),
+                            default=0,
+                        ),
+                    )
+                for name in z.namelist():
+                    match = page_pattern.match(name.rsplit("/", 1)[-1])
+                    if match:
+                        highest = max(highest, int(match.group(1)))
+        except Exception as e:
+            logger.warning("Could not read transcription page count from %s: %s", partner_zip, e)
+    return highest
 
 
 def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:

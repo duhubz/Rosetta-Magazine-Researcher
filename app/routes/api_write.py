@@ -169,13 +169,19 @@ def bookmarks_handler() -> Response:
 @bp.route("/download", methods=["POST"])
 def start_download() -> Response:
     """Starts a background download worker for a specific catalog ID."""
-    item_id = (request.get_json(silent=True) or {}).get("id")
+    payload = request.get_json(silent=True) or {}
+    item_id = payload.get("id")
+    mode = payload.get("mode", "full")
     if not item_id:
         return jsonify({"error": "Bad request", "detail": "'id' is required."}), 400
+    if mode not in ("full", "text"):
+        return jsonify({"error": "Bad request", "detail": "'mode' must be 'full' or 'text'."}), 400
     catalog_data = catalog.get_all_catalogs(force_refresh=False)
     item = next((i for i in catalog_data if i.get("id") == item_id), None)
     if item:
-        threading.Thread(target=download.download_worker, args=(item_id, item), daemon=True).start()
+        threading.Thread(
+            target=download.download_worker, args=(item_id, item, mode), daemon=True
+        ).start()
         return jsonify({"status": "started"})
     return jsonify({"error": "Item not found in catalog"}), 404
 
@@ -197,7 +203,8 @@ def uninstall_mag() -> Response:
     pdf_path = data_dir / target_rel_path
     try:
         # Release any cached open handle first (required for os.remove on Windows).
-        pdf_cache.evict(pdf_path)
+        if pdf_path.exists():
+            pdf_cache.evict(pdf_path)
         partner_zip = metadata.get_partner_zip(target_rel_path)
         if partner_zip and partner_zip.exists():
             os.remove(partner_zip)
