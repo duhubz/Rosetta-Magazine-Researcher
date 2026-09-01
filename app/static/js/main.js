@@ -2190,11 +2190,20 @@ The Search tab has a very smart date filter. You don't need exact days!
 ---
 
 ### ⌨️ Keyboard Shortcuts
-- **Left / Right Arrows:** Previous / Next Page.
-- **Page Up / Down:** Scroll the translation/transcription boxes.
-- **Ctrl + (Plus/Minus):** Zoom In / Out.
-- **Ctrl + 0:** Reset zoom to 100%.
-- **Escape:** Close any open editor or modal window.
+| Group | Shortcut | Action |
+| --- | --- | --- |
+| Reading | `← / →` | Previous / next page |
+| Reading | `Page Up / Page Down` | Scroll the text panel |
+| Reading | `Ctrl/Cmd + + / -` | Zoom the scan in / out |
+| Reading | `Ctrl/Cmd + 0` | Reset zoom to 100% |
+| Reading | `Ctrl/Cmd + Mouse Wheel` | Zoom toward the cursor |
+| Reading | `Enter / Space` (on a highlighted zone) | Jump to that zone's text |
+| Lists & grids | `← → ↑ ↓` | Move between items |
+| Lists & grids | `Home / End` | First / last item |
+| Lists & grids | `Enter / Space` | Open the selected item |
+| Dialogs | `Escape` | Close the top dialog |
+| Dialogs | `Tab / Shift+Tab` | Cycle focus inside the dialog |
+| General | `?` | Open this help window |
 
 ---
 
@@ -2278,13 +2287,18 @@ Copyright (c) 2026 Gaming Alexandria LLC.
 This program is free software: you can redistribute it and/or modify it under the terms of the **GNU Affero General Public License** as published by the Free Software Foundation.
 `;
 
-function toggleHelp(forceOpen = false) {
+function toggleHelp(forceOpen = false, scrollToShortcuts = false) {
     const overlay = document.getElementById('help-overlay');
     if (overlay.style.display === 'flex' && !forceOpen) {
         closeHelp();
     } else {
         document.getElementById('help-content').innerHTML = DOMPurify.sanitize(marked.parse(HELP_MARKDOWN));
         openDialog('help-overlay', { onRequestClose: () => closeHelp() });
+        if (scrollToShortcuts) {
+            const shortcutsHeading = Array.from(document.querySelectorAll('#help-content h3'))
+                .find((heading) => heading.textContent.includes('Keyboard Shortcuts'));
+            if (shortcutsHeading) shortcutsHeading.scrollIntoView();
+        }
     }
 }
 
@@ -2306,6 +2320,12 @@ document.addEventListener('keydown', (e) => {
     // While any dialog is open the dialog helper owns the keyboard;
     // suppress page-navigation shortcuts.
     if (dialogStack.length > 0) return;
+
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        toggleHelp(false, true);
+        return;
+    }
 
     if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') { e.preventDefault(); adjustImgZoom(15); return; }
