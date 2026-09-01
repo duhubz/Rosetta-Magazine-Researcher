@@ -173,10 +173,10 @@
     <!-- ========================================== -->
 
     <!-- COMMUNITY LIBRARY OVERLAY -->
-    <div id="library-overlay">
+    <div id="library-overlay" role="dialog" aria-modal="true" aria-labelledby="library-title">
         <div class="lib-header">
             <div style="display:flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin:0; color:var(--accent);">📚 Community Library</h2>
+                <h2 id="library-title" style="margin:0; color:var(--accent);">📚 Community Library</h2>
                 <div style="display:flex; gap: 10px;">
                     <button id="lib-update-all-btn" class="ctrl-btn" style="background:#ff9800; color:#000; display:none;" onclick="updateAllIssues()">🔄 Update All</button>
                     <button class="ctrl-btn" style="background:#444;" onclick="toggleLibrary()">✕ Close Library</button>
@@ -222,7 +222,7 @@
 
     <!-- ISSUE DETAILS MODAL -->
     <div id="modal-overlay" class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" onclick="event.stopPropagation()">
             <div class="modal-left">
                 <img id="modal-cover" src="" alt="Magazine Cover">
             </div>
@@ -239,19 +239,19 @@
 
     <!-- HELP MODAL -->
     <div id="help-overlay" class="modal-overlay" onclick="closeHelp(event)">
-        <div class="modal-content" onclick="event.stopPropagation()" style="width: 800px; max-height: 80vh; flex-direction: column;">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" onclick="event.stopPropagation()" style="width: 800px; max-height: 80vh; flex-direction: column;">
             <div style="padding: 20px 30px; background: #111; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin:0; color:var(--accent);">📖 Help & Credits</h2>
+                <h2 id="help-modal-title" style="margin:0; color:var(--accent);">📖 Help & Credits</h2>
                 <button class="close-modal" type="button" aria-label="Close" style="position:static;" onclick="closeHelp(event)">&times;</button>
             </div>
-            <div id="help-content" class="content-box markdown-mode" style="margin: 0; border: none; border-radius: 0; overflow-y: auto; flex: 1; padding: 30px; background: var(--panel);">
+            <div id="help-content" class="content-box markdown-mode" tabindex="0" style="margin: 0; border: none; border-radius: 0; overflow-y: auto; flex: 1; padding: 30px; background: var(--panel);">
             </div>
         </div>
     </div>
 
     <!-- CONTENT EDITOR MODAL (ToastUI) -->
     <div id="editor-modal-overlay" class="modal-overlay" onclick="closeContentEditor(event)">
-        <div class="modal-content editor-modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content editor-modal-content" role="dialog" aria-modal="true" aria-labelledby="editor-modal-title" onclick="event.stopPropagation()">
             <div class="editor-modal-header">
                 <div class="editor-modal-header-main">
                     <div>
@@ -279,10 +279,10 @@
 
     <!-- METADATA EDITOR MODAL -->
     <div id="metadata-modal-overlay" class="modal-overlay" onclick="closeMetadataEditor(event)">
-        <div class="modal-content editor-modal-content metadata-modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content editor-modal-content metadata-modal-content" role="dialog" aria-modal="true" aria-labelledby="metadata-modal-title" onclick="event.stopPropagation()">
             <div class="editor-modal-header">
                 <div>
-                    <h2 style="margin:0; color:#fde68a; font-size:22px;">Metadata Editor</h2>
+                    <h2 id="metadata-modal-title" style="margin:0; color:#fde68a; font-size:22px;">Metadata Editor</h2>
                     <div class="editor-modal-subtitle">Writes back to the existing <code>metadata.txt</code> key/value format.</div>
                 </div>
                 <button class="close-modal" type="button" aria-label="Close" onclick="closeMetadataEditor(event)">&times;</button>
@@ -356,10 +356,10 @@
 
     <!-- BOOKMARK MODAL -->
     <div id="bookmark-modal-overlay" class="modal-overlay" onclick="closeBookmarkModal(event)">
-        <div class="modal-content bookmark-modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content bookmark-modal-content" role="dialog" aria-modal="true" aria-labelledby="bookmark-modal-title" onclick="event.stopPropagation()">
             <div class="editor-modal-header">
                 <div>
-                    <h2 style="margin:0; color:var(--accent); font-size:22px;">Save Bookmark</h2>
+                    <h2 id="bookmark-modal-title" style="margin:0; color:var(--accent); font-size:22px;">Save Bookmark</h2>
                     <div id="bookmark-modal-target" class="bookmark-target"></div>
                 </div>
                 <button class="close-modal" type="button" aria-label="Close" onclick="closeBookmarkModal(event)">&times;</button>
@@ -380,7 +380,7 @@
 
     <!-- CONFIRMATION DIALOG MODAL -->
     <div id="confirm-modal-overlay" class="modal-overlay" onclick="closeConfirmModal(event)">
-        <div class="modal-content confirm-modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content confirm-modal-content" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" onclick="event.stopPropagation()">
             <div class="editor-modal-header">
                 <div>
                     <h2 id="confirm-modal-title" style="margin:0; color:var(--accent); font-size:22px;">Confirm Action</h2>
