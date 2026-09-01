@@ -15,7 +15,7 @@ from flask import Flask, jsonify, request
 from werkzeug.serving import is_running_from_reloader
 
 from app import config as cfg
-from app.routes import api, pages
+from app.routes import api, api_write, pages
 from app.services import state
 
 # --- Global Logging Configuration ---
@@ -56,9 +56,10 @@ def create_app() -> Flask:
         app.config["TEMPLATES_AUTO_RELOAD"] = True
         app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
-    # Register blueprints
+    # Register blueprints (read + write API blueprints share the /api prefix)
     app.register_blueprint(pages.bp)
     app.register_blueprint(api.bp, url_prefix="/api")
+    app.register_blueprint(api_write.bp, url_prefix="/api")
 
     # Expose the per-launch session token to templates (index.html meta tag)
     @app.context_processor
