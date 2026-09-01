@@ -76,9 +76,11 @@ def test_redirect_to_file_url_blocked():
             "https://archive.org/download/item/x.pdf": _redirect("file:///etc/passwd"),
         }
     )
-    with mock.patch("app.utils._open_no_redirect", server):
-        with pytest.raises(URLBlockedError) as exc:
-            safe_urlopen("https://archive.org/download/item/x.pdf", timeout=5)
+    with (
+        mock.patch("app.utils._open_no_redirect", server),
+        pytest.raises(URLBlockedError) as exc,
+    ):
+        safe_urlopen("https://archive.org/download/item/x.pdf", timeout=5)
 
     assert exc.value.url == "file:///etc/passwd"
     assert "scheme not http/https" in exc.value.reason
@@ -93,9 +95,11 @@ def test_redirect_to_non_allowlisted_host_blocked():
             "https://archive.org/x.pdf": _redirect("https://evil.internal.corp/x.pdf"),
         }
     )
-    with mock.patch("app.utils._open_no_redirect", server):
-        with pytest.raises(URLBlockedError) as exc:
-            safe_urlopen("https://archive.org/x.pdf", timeout=5)
+    with (
+        mock.patch("app.utils._open_no_redirect", server),
+        pytest.raises(URLBlockedError) as exc,
+    ):
+        safe_urlopen("https://archive.org/x.pdf", timeout=5)
 
     assert exc.value.url == "https://evil.internal.corp/x.pdf"
     assert "host not in allowlist" in exc.value.reason
@@ -215,9 +219,11 @@ def test_redirect_chain_exceeding_max_redirects_raises():
             "https://archive.org/hop": lambda: _redirect("https://archive.org/hop?again=1"),
         }
     )
-    with mock.patch("app.utils._open_no_redirect", server):
-        with pytest.raises(URLBlockedError) as exc:
-            safe_urlopen("https://archive.org/hop", timeout=5, max_redirects=3)
+    with (
+        mock.patch("app.utils._open_no_redirect", server),
+        pytest.raises(URLBlockedError) as exc,
+    ):
+        safe_urlopen("https://archive.org/hop", timeout=5, max_redirects=3)
 
     assert "too many redirects (max 3)" in str(exc.value)
     # initial request + 3 followed redirects = 4 fetches, then abort
@@ -232,9 +238,11 @@ def test_redirect_loop_fails_cleanly():
             "https://archive.org/b": lambda: _redirect("https://archive.org/a"),
         }
     )
-    with mock.patch("app.utils._open_no_redirect", server):
-        with pytest.raises(URLBlockedError) as exc:
-            safe_urlopen("https://archive.org/a", timeout=5)
+    with (
+        mock.patch("app.utils._open_no_redirect", server),
+        pytest.raises(URLBlockedError) as exc,
+    ):
+        safe_urlopen("https://archive.org/a", timeout=5)
 
     assert "too many redirects" in str(exc.value)
     # default max_redirects (config) is 5: 6 fetches total
@@ -335,9 +343,11 @@ def test_redirect_without_location_header_raises():
             "https://archive.org/x.pdf": _FakeHTTPResponse(status=302, headers={}, data=b""),
         }
     )
-    with mock.patch("app.utils._open_no_redirect", server):
-        with pytest.raises(URLBlockedError) as exc:
-            safe_urlopen("https://archive.org/x.pdf", timeout=5)
+    with (
+        mock.patch("app.utils._open_no_redirect", server),
+        pytest.raises(URLBlockedError) as exc,
+    ):
+        safe_urlopen("https://archive.org/x.pdf", timeout=5)
 
     assert "redirect without Location header" in exc.value.reason
 

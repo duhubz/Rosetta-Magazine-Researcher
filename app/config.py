@@ -15,10 +15,7 @@ if getattr(sys, "frozen", False):
     # MAC BUNDLE FIX:
     # If we are inside a Mac .app (Rosetta.app/Contents/MacOS/Rosetta)
     # we need to step up 3 levels to get to the folder containing the .app
-    if "Contents/MacOS" in str(exe_path):
-        ROOT_DIR = exe_path.parents[3]
-    else:
-        ROOT_DIR = exe_path.parent
+    ROOT_DIR = exe_path.parents[3] if "Contents/MacOS" in str(exe_path) else exe_path.parent
 else:
     # If running in a dev environment
     ROOT_DIR = Path(__file__).resolve().parent.parent
