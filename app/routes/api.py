@@ -13,11 +13,19 @@ import time
 import zipfile
 from pathlib import Path
 
-import fitz  # PyMuPDF
 from flask import Blueprint, Response, jsonify, request, send_file
 
 import app.config as cfg
-from app.services import catalog, download, metadata, pdf_cache, search_index, state, zip_utils
+from app.services import (
+    catalog,
+    download,
+    metadata,
+    pdf_cache,
+    rendering,
+    search_index,
+    state,
+    zip_utils,
+)
 from app.services import search as search_svc
 from app.services.text_utils import split_sections
 from app.utils import (
@@ -79,8 +87,7 @@ def render_page() -> Response:
         zoom = float(request.args.get("zoom", 1.5))
     except (TypeError, ValueError):
         return jsonify({"error": "Bad request", "detail": "'zoom' must be a number."}), 400
-    # Clamp zoom to a sane range to bound pixmap memory usage.
-    zoom = max(0.25, min(zoom, 4.0))
+    zoom = rendering.clamp_zoom(zoom)
 
     if not mag or pn < 0:
         return jsonify({"error": "Invalid magazine or page parameters"}), 400
@@ -91,12 +98,7 @@ def render_page() -> Response:
         return jsonify({"error": "Bad request", "detail": str(e)}), 400
 
     try:
-        # Cached document handle: held under a per-document lock for the
-        # duration of the render (fitz Documents are not thread-safe).
-        with pdf_cache.get_doc(pdf_path) as doc:
-            page = doc.load_page(pn)
-            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-            img = pix.tobytes("png")
+        img = rendering.render_page_png(pdf_path, pn, zoom)
         return send_file(io.BytesIO(img), mimetype="image/png")
     except Exception as e:
         logger.error(f"Render failed for {mag} page {pn}: {e}")
@@ -123,66 +125,17 @@ def get_text() -> Response:
     content = metadata.get_transcription_text(mag_rel_path, pg)
 
     # Determine total pages for UI constraints (cached document handle)
-    total = 0
-    try:
-        with pdf_cache.get_doc(pdf_path) as doc:
-            total = len(doc)
-    except Exception:
-        pass
+    total = rendering.get_page_count(pdf_path)
 
     # Split Rosetta format into sections (Transcription, Translation, Summary)
     jp, en, sum_t = "No transcription found.", "", ""
     if content:
         jp, en, sum_t = split_sections(content)
 
-    # Fetch raw metadata for the visual editor
-    raw_meta = ""
     partner_zip = metadata.get_partner_zip(mag_rel_path)
-
-    if partner_zip:
-        try:
-            with zipfile.ZipFile(partner_zip, "r") as z:
-                meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
-                if meta_file:
-                    raw_meta = z.read(meta_file).decode("utf-8", errors="ignore")
-        except Exception:
-            pass
-    else:
-        loose_meta = pdf_path.with_name(pdf_path.stem + ".metadata.txt")
-        if loose_meta.exists():
-            raw_meta = loose_meta.read_text(encoding="utf-8", errors="ignore")
-
-    # Fetch spatial coordinates for highlighting
-    coords_data = []
-    coords_filename = f"{pdf_path.stem}_COORDINATES.json"
-
-    if partner_zip:
-        try:
-            with zipfile.ZipFile(partner_zip, "r") as z:
-                z_c = zip_utils.find_member_by_basename(z, coords_filename)
-                if z_c:
-                    all_coords = json.loads(z.read(z_c).decode("utf-8"))
-                    coords_data = next(
-                        (
-                            c.get("data", [])
-                            for c in all_coords
-                            if str(c.get("page")) == str(int(pg))
-                        ),
-                        [],
-                    )
-        except Exception:
-            pass
-    else:
-        l_c = pdf_path.parent / coords_filename
-        if l_c.exists():
-            try:
-                all_coords = json.loads(l_c.read_text(encoding="utf-8"))
-                coords_data = next(
-                    (c.get("data", []) for c in all_coords if str(c.get("page")) == str(int(pg))),
-                    [],
-                )
-            except Exception:
-                pass
+    # Raw metadata for the visual editor + spatial coordinates for highlighting
+    raw_meta = metadata.read_raw_metadata(pdf_path, partner_zip)
+    coords_data = rendering.get_page_coordinates(pdf_path, partner_zip, int(pg))
 
     return jsonify(
         {
@@ -280,33 +233,9 @@ def save_text() -> Response:
 
             # 3. Update Coordinates
             if data.get("coords") is not None:
-                c_fn = f"{pdf_path.stem}_COORDINATES.json"
-                all_c = []
-                if partner_zip:
-                    try:
-                        with zipfile.ZipFile(partner_zip, "r") as z:
-                            z_c = zip_utils.find_member_by_basename(z, c_fn)
-                            if z_c:
-                                all_c = json.loads(z.read(z_c).decode("utf-8"))
-                    except Exception:
-                        pass
-                else:
-                    l_c = pdf_path.parent / c_fn
-                    if l_c.exists():
-                        try:
-                            all_c = json.loads(l_c.read_text(encoding="utf-8"))
-                        except Exception:
-                            pass
-
-                found = False
-                for c in all_c:
-                    if str(c.get("page")) == str(page_num):
-                        c["data"] = data["coords"]
-                        found = True
-                        break
-                if not found:
-                    all_c.append({"page": page_num, "data": data["coords"]})
-
+                c_fn = rendering.coordinates_filename(pdf_path)
+                all_c = rendering.load_all_coordinates(pdf_path, partner_zip)
+                rendering.merge_page_coordinates(all_c, page_num, data["coords"])
                 new_c_json = json.dumps(all_c, ensure_ascii=False, indent=2)
                 if partner_zip:
                     zip_updates[c_fn] = new_c_json
