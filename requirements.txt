@@ -3,5 +3,6 @@ Flask>=3.0,<4
 # unbounded upper range lets a bad/major release ship silently. Dependabot can
 # still bump within 1.24.x; bumping past 1.25 requires a deliberate PR.
 PyMuPDF>=1.24.13,<1.25
+pycryptodome>=3.20,<4
 certifi
 PyYAML>=6.0

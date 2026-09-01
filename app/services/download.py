@@ -13,8 +13,14 @@ from pathlib import Path
 from typing import Any
 
 import app.config as cfg
-from app.services import metadata, state, zip_utils
-from app.utils import URLBlockedError, atomic_write_text, safe_name, safe_urlopen
+from app.services import mega_download, metadata, state, zip_utils
+from app.utils import (
+    URLBlockedError,
+    atomic_write_text,
+    is_allowed_fetch_url,
+    safe_name,
+    safe_urlopen,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +48,37 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
 
         state.DOWNLOAD_STATE[task_id]["status"] = f"Downloading {file_type}..."
         state.DOWNLOAD_STATE[task_id]["progress"] = 0
+
+        if mega_download.is_public_share_url(url):
+            state.DOWNLOAD_STATE[task_id]["status"] = f"Downloading {file_type} via Mega..."
+            if not cfg.allow_downloads_from_any_host() and not is_allowed_fetch_url(url):
+                logger.warning(
+                    "Blocked %s download URL (host not in allowlist): %s",
+                    file_type,
+                    mega_download.mask_key(url),
+                )
+                continue
+            try:
+                mega_download.download_public_file(
+                    url,
+                    out_path,
+                    progress_cb=lambda done, total: state.DOWNLOAD_STATE[task_id].__setitem__(
+                        "progress", int(done * 100 / total) if total else 0
+                    ),
+                    should_abort=state.SHUTDOWN_EVENT.is_set,
+                    allow_any_host=cfg.allow_downloads_from_any_host(),
+                )
+                return True
+            except URLBlockedError as e:
+                logger.warning("Blocked %s download URL (%s): %s", file_type, e.reason, e.url)
+                continue
+            except Exception as e:
+                logger.debug(
+                    "%s download failed from %s: %s", file_type, mega_download.mask_key(url), e
+                )
+                if state.SHUTDOWN_EVENT.is_set():
+                    break
+                continue
 
         # Cache-busting parameter to prevent stale downloads from CDNs
         cb_param = f"nocache={int(time.time() * 1000)}"

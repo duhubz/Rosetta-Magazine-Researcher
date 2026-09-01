@@ -365,3 +365,62 @@ def test_user_agent_header_sent(monkeypatch):
 
     ua = {k.lower(): v for k, v in seen_headers.items()}.get("user-agent", "")
     assert ua == utils.USER_AGENT
+
+
+# --- POST body / redirect method semantics ----------------------------------------
+
+
+def test_post_data_sent_on_initial_request():
+    """Passing data makes the initial request a POST carrying that body."""
+    requests = []
+
+    def fake_open(req, timeout=None):
+        requests.append(req)
+        return _FakeHTTPResponse()
+
+    with mock.patch("app.utils._open_no_redirect", fake_open):
+        safe_urlopen("https://archive.org/x.pdf", timeout=5, data=b"payload")
+
+    assert len(requests) == 1
+    assert requests[0].data == b"payload"
+    assert requests[0].get_method() == "POST"
+
+
+def test_post_downgrades_to_get_on_302():
+    """A 302 redirect downgrades the next hop to GET with no body."""
+    requests = []
+
+    def fake_open(req, timeout=None):
+        requests.append(req)
+        if req.full_url == "https://archive.org/x.pdf":
+            return _redirect("https://www.gamingalexandria.com/x.pdf", status=302)
+        return _FakeHTTPResponse()
+
+    with mock.patch("app.utils._open_no_redirect", fake_open):
+        safe_urlopen("https://archive.org/x.pdf", timeout=5, data=b"payload")
+
+    assert len(requests) == 2
+    assert requests[0].data == b"payload"
+    assert requests[0].get_method() == "POST"
+    assert requests[1].data is None
+    assert requests[1].get_method() == "GET"
+
+
+def test_post_preserved_on_307():
+    """A 307 redirect preserves the POST method and body for the next hop."""
+    requests = []
+
+    def fake_open(req, timeout=None):
+        requests.append(req)
+        if req.full_url == "https://archive.org/x.pdf":
+            return _redirect("https://www.gamingalexandria.com/x.pdf", status=307)
+        return _FakeHTTPResponse()
+
+    with mock.patch("app.utils._open_no_redirect", fake_open):
+        safe_urlopen("https://archive.org/x.pdf", timeout=5, data=b"payload")
+
+    assert len(requests) == 2
+    assert requests[0].data == b"payload"
+    assert requests[0].get_method() == "POST"
+    assert requests[1].data == b"payload"
+    assert requests[1].get_method() == "POST"

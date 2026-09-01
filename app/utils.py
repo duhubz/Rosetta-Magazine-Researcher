@@ -161,6 +161,7 @@ def safe_urlopen(
     max_redirects: int | None = None,
     allow_any_host: bool = False,
     headers: dict[str, str] | None = None,
+    data: bytes | None = None,
 ):
     """Open a URL, following redirects manually and re-checking each hop against
     is_allowed_fetch_url(). Raises URLBlockedError with the offending URL if any
@@ -170,6 +171,9 @@ def safe_urlopen(
     - `allow_any_host=True` skips the host allowlist for every hop but keeps
       the http/https scheme check (see security.allow_downloads_from_any_host).
     - `headers` are merged over a default User-Agent header.
+    - `data` (bytes) makes the initial hop a POST carrying that body; a
+      301/302/303 redirect downgrades the next hop to GET with no body, while
+      307/308 preserve the method and body.
     """
     if max_redirects is None:
         max_redirects = cfg.max_redirects()
@@ -178,18 +182,24 @@ def safe_urlopen(
         req_headers.update(headers)
 
     current = str(url)
+    current_data = data
     for _hop in range(max_redirects + 1):
         reason = _fetch_url_block_reason(current, allow_any_host)
         if reason:
             logger.warning("Blocked fetch URL (%s): %s", reason, current)
             raise URLBlockedError(current, reason)
 
-        req = urllib.request.Request(current, headers=req_headers)
+        req = urllib.request.Request(current, data=current_data, headers=req_headers)
         response = _open_no_redirect(req, timeout=timeout)
 
         status = getattr(response, "status", None) or getattr(response, "code", None) or 200
         if status not in _REDIRECT_CODES:
             return response
+
+        # 301/302/303 downgrade to GET for subsequent hops; 307/308 preserve
+        # the method and body.
+        if status in (301, 302, 303):
+            current_data = None
 
         location = None
         resp_headers = getattr(response, "headers", None)

@@ -45,6 +45,11 @@ security:
     - www.gamingalexandria.com
     - archive.org
     - "*.archive.org"
+    # Mega public-share support (API + storage hosts). Remove these to disable Mega downloads.
+    - mega.nz
+    - mega.io
+    - mega.co.nz
+    - "*.mega.co.nz"
   # Advanced / trusted-catalog-only: when true, magazine/data-ZIP downloads
   # (pdf_sources / zip_sources) may fetch from ANY http/https host, skipping
   # the allowlist above. Non-http(s) schemes (file:, javascript:, ...) are
