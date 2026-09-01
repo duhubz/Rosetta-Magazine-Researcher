@@ -3,7 +3,7 @@
 import json
 import zipfile
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from app.services import rendering
 
@@ -20,7 +20,7 @@ def test_clamp_zoom_bounds():
 
 
 def _make_pdf(path, pages=2):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for i in range(pages):
         page = doc.new_page(width=100, height=100)
         page.insert_text((10, 50), f"page {i + 1}")

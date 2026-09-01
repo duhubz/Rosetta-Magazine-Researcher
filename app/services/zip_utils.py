@@ -28,20 +28,6 @@ def find_member_by_basename(zip_file: zipfile.ZipFile, target_basename: str) -> 
     return next((n for n in zip_file.namelist() if n.split("/")[-1].lower() == target), None)
 
 
-def update_zip_content(zip_path: Path, filename: str, new_content: str | bytes) -> None:
-    """
-    Updates or adds a single file inside an existing ZIP archive.
-
-    Thin wrapper over update_zip_contents() for the single-member case.
-
-    Args:
-        zip_path: Path to the target .zip file.
-        filename: The internal name of the file to update (e.g., 'metadata.txt').
-        new_content: The content to write into that file.
-    """
-    update_zip_contents(zip_path, {filename: new_content})
-
-
 def update_zip_contents(zip_path: Path, updates: dict[str, str | bytes]) -> None:
     """
     Rewrite multiple members in one atomic pass. Keys are member paths,
