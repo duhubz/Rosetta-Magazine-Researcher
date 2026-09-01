@@ -1195,9 +1195,9 @@ function openModal(id, isDownloaded, isTextOnly) {
         } else if (isDownloaded) {
             actionArea.innerHTML = isTextOnly ? `
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-read" style="flex:1;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Read Now</button>
-                    <button class="btn-dl" style="flex:1;" data-action="download" data-id="${escapeHtml(item.id)}">⬇️ Get Full Version</button>
-                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" data-action="uninstall" data-pdf="${escapeHtml(item.pdf_filename || '')}">🗑️ Uninstall</button>
+                    <button class="btn-read" style="flex:1; margin-top:0;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Read Now</button>
+                    <button class="btn-dl" style="flex:1; margin-top:0;" data-action="download" data-id="${escapeHtml(item.id)}">⬇️ Get Full Version</button>
+                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px; margin-top:0;" data-action="uninstall" data-pdf="${escapeHtml(item.pdf_filename || '')}">🗑️ Uninstall</button>
                 </div>
             ` : `
                 <div style="display:flex; gap:10px;">
@@ -1207,7 +1207,7 @@ function openModal(id, isDownloaded, isTextOnly) {
             `;
             bindActionButtons(actionArea);
         } else {
-            actionArea.innerHTML = `<div style="display:flex; gap:10px;"><button class="btn-dl" style="flex:1;" data-action="download" data-id="${escapeHtml(item.id)}">☁️ Download to Library</button><button class="btn-dl" style="flex:1;" data-action="download-text" data-id="${escapeHtml(item.id)}">📄 Text Only</button></div>`;
+            actionArea.innerHTML = `<div style="display:flex; gap:10px;"><button class="btn-dl" style="flex:1; margin-top:0;" data-action="download" data-id="${escapeHtml(item.id)}">☁️ Download to Library</button><button class="btn-dl" style="flex:1; margin-top:0;" data-action="download-text" data-id="${escapeHtml(item.id)}">📄 Text Only</button></div>`;
             bindActionButtons(actionArea);
         }
         document.getElementById('modal-overlay').style.display = 'flex';
@@ -1422,6 +1422,9 @@ function drawCoordinateBoxes(coordinatesArray) {
     if (!container) return;
 
     container.querySelectorAll('.spatial-box').forEach(box => box.remove());
+
+    // Text-only installs have no page image, so spatial overlays are meaningless.
+    if (metadataCache[magSelect.value]?.text_only === 'true') return;
 
     if (!coordinatesArray || !Array.isArray(coordinatesArray) || coordinatesArray.length === 0) return;
 
