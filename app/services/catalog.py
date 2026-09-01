@@ -148,7 +148,10 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
             if force_refresh:
                 try:
                     c_data = json.loads(c_file.read_text(encoding="utf-8"))
-                except Exception:
+                except Exception as e:
+                    # Unparseable community catalog: skip update_url check;
+                    # _load_catalog_file below reports the real load error.
+                    logger.debug("Could not pre-parse %s for update_url: %s", c_file.name, e)
                     c_data = None
                 if isinstance(c_data, dict) and "update_url" in c_data:
                     try:
@@ -161,8 +164,10 @@ def get_all_catalogs(force_refresh: bool = False) -> list[dict[str, Any]]:
                             _store_parsed(c_file, _parse_catalog_text(json.dumps(new_data)))
                     except URLBlockedError as e:
                         logger.warning(f"Blocked update_url in {c_file.name} ({e.reason}): {e.url}")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Failed auto-update: keep serving the on-disk copy,
+                        # but tell the user their catalog didn't refresh.
+                        logger.warning("Could not auto-update catalog %s: %s", c_file.name, e)
 
             catalogs.extend(_load_catalog_file(c_file))
         except Exception as e:

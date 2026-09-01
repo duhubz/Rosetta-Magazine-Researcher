@@ -145,8 +145,10 @@ def load_metadata_cache() -> None:
                     meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
                     if meta_file:
                         meta = parse_metadata(z.read(meta_file).decode("utf-8", errors="ignore"))
-            except Exception:
-                pass
+            except Exception as e:
+                # Corrupt/unreadable partner ZIP: the magazine still lists,
+                # but without its ZIP metadata. Surface it for the user.
+                logger.warning("Could not read metadata from %s: %s", partner_zip, e)
 
         # Overlay loose files (they take priority over ZIP content)
         loose_meta = pdf.with_name(pdf.stem + ".metadata.txt")
@@ -200,8 +202,9 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
                 for zname in z.namelist():
                     if pattern.search(zname.split("/")[-1]):
                         return z.read(zname).decode("utf-8", errors="ignore")
-        except Exception:
-            pass
+        except Exception as e:
+            # Fall through to loose files, but record why the ZIP was skipped.
+            logger.warning("Could not read transcription from %s: %s", partner_zip, e)
 
     # 2. Check loose Master File
     master_file = pdf_path.parent / f"{pdf_path.stem}_COMPLETE.txt"

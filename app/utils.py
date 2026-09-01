@@ -197,8 +197,9 @@ def safe_urlopen(
             location = resp_headers.get("Location") or resp_headers.get("location")
         try:
             response.close()
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort close of an intermediate redirect response.
+            logger.debug("Error closing redirect response: %s", e)
         if not location:
             raise URLBlockedError(current, "redirect without Location header")
         # Resolve relative Location headers against the current URL.

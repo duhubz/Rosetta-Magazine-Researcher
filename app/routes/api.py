@@ -191,12 +191,13 @@ def get_cover(item_id: str) -> Response:
             # the scheme/host allowlist.
             with safe_urlopen(item["cover_url"], timeout=cfg.cover_fetch_timeout()) as response:
                 img_data = response.read()
-                # Clean old version caches
+                # Clean old version caches (best-effort: a locked/vanished
+                # file only means a stale cache entry lingers)
                 for old in covers_dir.glob(f"{safe_id}_v*.cache"):
                     try:
                         old.unlink()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Could not remove stale cover cache %s: %s", old, e)
                 atomic_write_bytes(cache_path, img_data)
                 return send_file(io.BytesIO(img_data), mimetype="image/jpeg")
         except URLBlockedError as e:

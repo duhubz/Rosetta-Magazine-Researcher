@@ -41,8 +41,9 @@ def _close_entry(doc: fitz.Document, doc_lock: threading.Lock) -> None:
     with doc_lock:
         try:
             doc.close()
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort cleanup: a close failure only leaks one handle.
+            logger.debug("Error closing cached PDF document: %s", e)
 
 
 @contextlib.contextmanager

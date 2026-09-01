@@ -16,6 +16,8 @@ import app.config as cfg
 from app.services import metadata, state, zip_utils
 from app.utils import URLBlockedError, atomic_write_text, safe_name, safe_urlopen
 
+logger = logging.getLogger(__name__)
+
 # Streaming chunk size for downloads (64 KiB); PDFs are never buffered whole.
 _CHUNK_SIZE = 65536
 
@@ -77,7 +79,10 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
             if out_path.exists():
                 out_path.unlink()
             continue
-        except Exception:
+        except Exception as e:
+            # A failing mirror is expected: log it and fall through to the
+            # next source in the waterfall.
+            logger.debug("%s download failed from %s: %s", file_type, url, e)
             if out_path.exists():
                 out_path.unlink()
             if state.SHUTDOWN_EVENT.is_set():
@@ -88,6 +93,18 @@ def download_waterfall(task_id: str, out_path: Path, sources: list[str], file_ty
         f"All {file_type} download sources were blocked or failed."
     )
     return False
+
+
+def _cleanup_temp_dir(temp_dir: Path) -> None:
+    """Best-effort removal of the in-flight '.temp_*' download folder.
+
+    Leftovers are dot-prefixed and therefore excluded from library scans,
+    so a failed cleanup is only worth a debug note.
+    """
+    try:
+        shutil.rmtree(temp_dir)
+    except Exception as e:
+        logger.debug("Could not remove temp dir %s: %s", temp_dir, e)
 
 
 def download_worker(task_id: str, item: dict[str, Any]) -> None:
@@ -171,8 +188,10 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
                     meta = metadata.parse_metadata(
                         z.read(meta_file).decode("utf-8", errors="ignore")
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            # Corrupt Data ZIP: install continues with catalog-derived names
+            # only, which the user should know about.
+            logger.warning("Could not read metadata from downloaded ZIP %s: %s", zip_temp.name, e)
 
     # Build Folder: Magazines/MagName/Date - IssueName (sanitized components)
     try:
@@ -191,10 +210,7 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     except ValueError:
         state.DOWNLOAD_STATE[task_id]["error"] = "Catalog entry has an unsafe folder name."
         state.DOWNLOAD_STATE[task_id]["done"] = True
-        try:
-            shutil.rmtree(temp_dir)
-        except Exception:
-            pass
+        _cleanup_temp_dir(temp_dir)
         return
 
     folder_name = ""
@@ -213,10 +229,7 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     if not final_dir.resolve().is_relative_to(data_dir.resolve()):
         state.DOWNLOAD_STATE[task_id]["error"] = "Unsafe destination path rejected."
         state.DOWNLOAD_STATE[task_id]["done"] = True
-        try:
-            shutil.rmtree(temp_dir)
-        except Exception:
-            pass
+        _cleanup_temp_dir(temp_dir)
         return
 
     final_dir.mkdir(parents=True, exist_ok=True)
@@ -257,16 +270,15 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
             zip_utils.update_zip_content(zip_path, "metadata.txt", meta_content)
             if loose_meta.exists():
                 os.remove(loose_meta)
-        except Exception:
-            pass
+        except Exception as e:
+            # The install succeeded but the consolidated metadata could not
+            # be written into the ZIP — the library entry may show stale or
+            # missing metadata, so surface it.
+            logger.warning("Could not write metadata into %s: %s", zip_path.name, e)
     else:
         atomic_write_text(loose_meta, meta_content)
 
-    # Cleanup temp
-    try:
-        shutil.rmtree(temp_dir)
-    except Exception:
-        pass
+    _cleanup_temp_dir(temp_dir)
 
     state.DOWNLOAD_STATE[task_id]["progress"] = 100
     state.DOWNLOAD_STATE[task_id]["status"] = "Complete!"

@@ -5,6 +5,7 @@ Includes the metadata cache, download progress tracking, and the idle-shutdown m
 """
 
 import contextlib
+import logging
 import os
 import secrets
 import threading
@@ -13,6 +14,8 @@ from collections.abc import Iterator
 from typing import Any
 
 import app.config as cfg
+
+logger = logging.getLogger(__name__)
 
 # --- Global Caches & Tracking ---
 
@@ -95,8 +98,10 @@ def start_heartbeat_monitor() -> None:
 
                     pdf_cache.close_all()
                     search_index.close_index()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Best-effort cleanup just before os._exit; nothing to do
+                    # beyond noting it for debug runs.
+                    logger.debug("Shutdown cleanup failed: %s", e)
                 # Use os._exit(0) to ensure the entire process tree closes.
                 os._exit(0)
 

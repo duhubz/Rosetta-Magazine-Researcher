@@ -92,8 +92,9 @@ def get_index() -> sqlite3.Connection:
         if _conn is not None:
             try:
                 _conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                # Best-effort close before reopening against the new path.
+                logger.debug("Error closing stale index connection: %s", e)
             _conn = None
         try:
             _conn = open_index()
@@ -111,8 +112,9 @@ def close_index() -> None:
         if _conn is not None:
             try:
                 _conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                # Best-effort shutdown cleanup; the process is exiting anyway.
+                logger.debug("Error closing index connection: %s", e)
         _conn = None
         _conn_db_path = None
 
