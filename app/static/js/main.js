@@ -131,6 +131,21 @@ async function init(forceUpdate = false) {
         }
         
         document.getElementById('mag-input').value = pathToLabel[magSelect.value] || "";
+        if (!oldVal) {
+            let savedLastRead = null;
+            try {
+                savedLastRead = JSON.parse(localStorage.getItem('lastRead'));
+            } catch (err) {
+                console.warn('Ignoring corrupted lastRead in localStorage:', err);
+                localStorage.removeItem('lastRead');
+            }
+            if (savedLastRead && localFiles.includes(savedLastRead.mag)) {
+                magSelect.value = savedLastRead.mag;
+                document.getElementById('mag-input').value = pathToLabel[savedLastRead.mag] || "";
+                pageInput.value = Number.isInteger(savedLastRead.page) && savedLastRead.page >= 1
+                    ? savedLastRead.page : 1;
+            }
+        }
         if (forceUpdate) update();
 
     } else {
@@ -183,10 +198,12 @@ async function update(targetPage = null, searchTerms = null) {
     adjustImgZoom(0);
 
     // Request Text & Metadata
+    let textFetchSucceeded = false;
     try {
         const res = await fetch(`/api/text?mag=${encodeURIComponent(mag)}&page=${page}&t=${Date.now()}`);
         if (!res.ok) throw new Error("Server error fetching text");
         currentRawData = await res.json();
+        textFetchSucceeded = true;
     } catch (err) {
         console.warn("Could not fetch page text, showing empty state:", err);
         currentRawData = {
@@ -196,6 +213,19 @@ async function update(targetPage = null, searchTerms = null) {
     }
 
     maxPage = currentRawData.total_pages || 1;
+    const currentPage = parseInt(pageInput.value, 10);
+    if (textFetchSucceeded && maxPage >= 1 && currentPage > maxPage && currentPage !== 1) {
+        pageInput.value = 1;
+        await update();
+        return;
+    }
+    if (textFetchSucceeded) {
+        const displayedPage = parseInt(pageInput.value, 10);
+        localStorage.setItem('lastRead', JSON.stringify({
+            mag: magSelect.value,
+            page: Number.isInteger(displayedPage) && displayedPage >= 1 ? displayedPage : 1,
+        }));
+    }
     drawCoordinateBoxes(currentRawData.coordinates ||[]);
     renderContent();
     renderMetadata(currentRawData.metadata || {}, page, mag);
@@ -233,6 +263,7 @@ function setImgZoom(val, anchor = null) {
     if (isNaN(num)) num = 100;
 
     currentImgZoom = Math.max(30, Math.min(num, 500));
+    localStorage.setItem('prefZoom', String(currentImgZoom));
 
     const leftPanel = document.getElementById('left');
     const safeHeight = leftPanel.clientHeight - 40;
@@ -2067,11 +2098,36 @@ function showTab(tab) {
 
 function toggleTheme() {
     document.body.classList.toggle('light-mode');
+    localStorage.setItem('prefTheme', document.body.classList.contains('light-mode') ? 'light' : 'dark');
     syncContentEditorTheme();
 }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 function toggleSec(id, show) { document.getElementById(id).style.display = show ? 'block' : 'none'; }
-function updateFont(v) { document.documentElement.style.setProperty('--font-size', v + 'px'); }
+function updateFont(v) {
+    document.documentElement.style.setProperty('--font-size', v + 'px');
+    localStorage.setItem('prefFontSize', String(v));
+}
+
+function restorePreferences() {
+    const fontRaw = localStorage.getItem('prefFontSize');
+    const fontSize = parseInt(fontRaw, 10);
+    if (Number.isNaN(fontSize)) {
+        if (fontRaw !== null) localStorage.removeItem('prefFontSize');
+    } else {
+        const clampedFontSize = Math.max(12, Math.min(fontSize, 40));
+        document.documentElement.style.setProperty('--font-size', `${clampedFontSize}px`);
+        document.getElementById('font-slider').value = clampedFontSize;
+    }
+
+    const zoomRaw = localStorage.getItem('prefZoom');
+    const zoom = parseInt(zoomRaw, 10);
+    if (Number.isNaN(zoom)) {
+        if (zoomRaw !== null) localStorage.removeItem('prefZoom');
+    } else {
+        currentImgZoom = Math.max(30, Math.min(zoom, 500));
+        document.getElementById('zoom-input').value = `${currentImgZoom}%`;
+    }
+}
 
 // Help Modal Content
 const HELP_MARKDOWN = `
@@ -2409,6 +2465,7 @@ initRovingContainer('lib-grid', '.lib-card', { grid: true });
 initRovingContainer('lib-mag-list', '.mag-list-item');
 initRovingContainer('search-results', '.result-item-main');
 initToolbarDragAndDrop();
+restorePreferences();
 init(true);
 showAIDisclaimer();
 setTimeout(checkForUpdateBanner, 3000);

@@ -18,6 +18,10 @@
     <script src="{{ url_for('static', filename='js/vendor/purify.min.js') }}"></script>
 </head>
 <body class="dark-mode">
+    <script>
+        try { if (localStorage.getItem('prefTheme') === 'light') document.body.classList.add('light-mode'); }
+        catch (err) { console.debug('Could not restore theme preference:', err); }
+    </script>
 
     <!-- ========================================== -->
     <!-- MAIN APPLICATION WORKSPACE                 -->
@@ -448,7 +452,7 @@
             <button class="ctrl-btn" aria-label="Zoom in" onclick="adjustImgZoom(15)">🔍+</button>
             <div class="divider"></div>
             <span style="font-size: 11px; color: #9aa0a6;">Font</span>
-            <input type="range" aria-label="Text size" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
+            <input type="range" id="font-slider" aria-label="Text size" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
         </div>
 
         <div class="divider"></div>
