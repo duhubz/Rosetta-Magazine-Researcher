@@ -231,6 +231,9 @@ def save_text() -> Response:
             master_path = pdf_path.parent / master_filename
             if not master_path.exists():
                 master_path = None
+            # All ZIP member updates are collected here and written in ONE
+            # atomic rewrite pass at the end (instead of 3 sequential ones).
+            zip_updates: dict[str, str | bytes] = {}
 
             # 1. Update Content (Master File or Page Files)
             zip_has_master = False
@@ -255,12 +258,12 @@ def save_text() -> Response:
                 if master_path:
                     atomic_write_text(master_path, new_master)
                 else:
-                    zip_utils.update_zip_content(partner_zip, master_filename, new_master)
+                    zip_updates[master_filename] = new_master
             else:
                 content_h = f"#GA-TRANSCRIPTION\n{new_page_content}"
                 if partner_zip:
                     target = f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
-                    zip_utils.update_zip_content(partner_zip, target, content_h)
+                    zip_updates[target] = content_h
                 else:
                     target_p = pdf_path.parent / f"{pdf_path.stem}_p{str(page_num).zfill(3)}.txt"
                     atomic_write_text(target_p, content_h)
@@ -269,7 +272,7 @@ def save_text() -> Response:
             # key, so partial saves can't blank out metadata.txt)
             if "meta" in data:
                 if partner_zip:
-                    zip_utils.update_zip_content(partner_zip, "metadata.txt", data.get("meta", ""))
+                    zip_updates["metadata.txt"] = data.get("meta", "")
                 else:
                     atomic_write_text(
                         pdf_path.with_name(pdf_path.stem + ".metadata.txt"), data.get("meta", "")
@@ -306,9 +309,13 @@ def save_text() -> Response:
 
                 new_c_json = json.dumps(all_c, ensure_ascii=False, indent=2)
                 if partner_zip:
-                    zip_utils.update_zip_content(partner_zip, c_fn, new_c_json)
+                    zip_updates[c_fn] = new_c_json
                 else:
                     atomic_write_text(pdf_path.parent / c_fn, new_c_json)
+
+            # Single atomic ZIP rewrite for all collected member updates.
+            if partner_zip and zip_updates:
+                zip_utils.update_zip_contents(partner_zip, zip_updates)
 
             metadata.load_metadata_cache()
             # Keep the FTS5 search index in sync with the edited magazine.
