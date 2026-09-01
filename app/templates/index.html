@@ -420,6 +420,7 @@
             <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
             <input type="number" id="page-num" aria-label="Page number" value="1" min="1" style="width: 45px; text-align: center;">
             <button class="ctrl-btn" onclick="changePage(1)">Next</button>
+            <button class="ctrl-btn" id="thumb-btn" aria-label="Page grid" title="Page grid (thumbnails)" onclick="openThumbGrid()">⊞</button>
         </div>
 
         <div class="divider"></div>
@@ -465,6 +466,14 @@
             <button id="theme-btn" class="ctrl-btn" aria-label="Toggle light or dark theme" onclick="toggleTheme()">☀️</button>
         </div>
 
+    </div>
+
+    <div id="thumb-overlay" class="modal-overlay" onclick="closeThumbGrid(event)">
+        <div class="modal-content thumb-modal" role="dialog" aria-modal="true" aria-labelledby="thumb-modal-title" onclick="event.stopPropagation()">
+            <button class="close-modal" type="button" aria-label="Close" onclick="closeThumbGrid()">×</button>
+            <h2 id="thumb-modal-title">Pages</h2>
+            <div id="thumb-grid"></div>
+        </div>
     </div>
 
     <!-- Application Script -->

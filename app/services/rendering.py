@@ -7,21 +7,27 @@ Coordinates live in '<stem>_COORDINATES.json' (loose file next to the PDF or
 a member of the partner ZIP): a list of {"page": n, "data": [...]} entries.
 """
 
+import hashlib
 import json
 import logging
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Any
 
 import pymupdf
 
+import app.config as cfg
 from app.services import pdf_cache, zip_utils
+from app.utils import atomic_write_bytes
 
 logger = logging.getLogger(__name__)
 
 # Sane zoom bounds so a hostile/buggy request can't allocate a huge pixmap.
 MIN_ZOOM = 0.25
 MAX_ZOOM = 4.0
+THUMB_ZOOM = 0.2
+THUMBS_DIRNAME = ".thumbs"
 
 
 def clamp_zoom(zoom: float) -> float:
@@ -41,6 +47,31 @@ def render_page_png(pdf_path: Path, page_number: int, zoom: float) -> bytes:
         page = doc.load_page(page_number)
         pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
         return pix.tobytes("png")
+
+
+def get_thumbnail_png(pdf_path: Path, pdf_rel_path: str, page_number: int) -> bytes:
+    """Returns a low-resolution PNG thumbnail, using a versioned disk cache."""
+    stat = pdf_path.stat()
+    name_hash = hashlib.sha1(pdf_rel_path.encode("utf-8")).hexdigest()[:16]
+    ver_hash = hashlib.sha1(f"{stat.st_mtime_ns}|{stat.st_size}".encode()).hexdigest()[:16]
+    cache_root = cfg.data_dir() / THUMBS_DIRNAME
+    cache_dir = cache_root / f"{name_hash}_{ver_hash}"
+    cache_path = cache_dir / f"{page_number}.png"
+    if cache_path.exists():
+        return cache_path.read_bytes()
+
+    for stale_dir in cache_root.glob(f"{name_hash}_*"):
+        if stale_dir != cache_dir:
+            logger.debug("Removing stale thumbnail cache %s", stale_dir)
+            try:
+                shutil.rmtree(stale_dir)
+            except OSError as e:
+                logger.warning("Could not remove stale thumbnail cache %s: %s", stale_dir, e)
+
+    img = render_page_png(pdf_path, page_number, THUMB_ZOOM)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    atomic_write_bytes(cache_path, img)
+    return img
 
 
 def get_page_count(pdf_path: Path) -> int:

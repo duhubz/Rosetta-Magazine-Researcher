@@ -32,6 +32,7 @@ let labelToPath = {};
 let pathToLabel = {};
 let itemsWithUpdates =[];
 let completedDownloads = new Set();
+let thumbObserver = null;
 
 img.onerror = () => {
     if (!img.getAttribute('src')) return;
@@ -2101,6 +2102,72 @@ function toggleTheme() {
     localStorage.setItem('prefTheme', document.body.classList.contains('light-mode') ? 'light' : 'dark');
     syncContentEditorTheme();
 }
+
+function openThumbGrid() {
+    const mag = magSelect.value;
+    if (!mag) return;
+    const total = maxPage || 1;
+    const textOnly = metadataCache[mag] && metadataCache[mag].text_only === 'true';
+    const grid = document.getElementById('thumb-grid');
+    grid.textContent = '';
+    if (thumbObserver) thumbObserver.disconnect();
+    thumbObserver = null;
+    let currentTile = null;
+
+    for (let n = 1; n <= total; n++) {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'thumb-tile';
+        tile.id = `thumb-tile-${n}`;
+        tile.dataset.page = n;
+        tile.setAttribute('aria-label', `Page ${n}`);
+        if (n === parseInt(pageInput.value, 10)) {
+            tile.classList.add('current');
+            tile.setAttribute('aria-current', 'page');
+            currentTile = tile;
+        }
+        if (!textOnly) {
+            const thumbnail = document.createElement('img');
+            thumbnail.alt = '';
+            thumbnail.draggable = false;
+            thumbnail.onerror = () => { thumbnail.style.display = 'none'; };
+            tile.appendChild(thumbnail);
+        }
+        const number = document.createElement('span');
+        number.className = 'thumb-num';
+        number.textContent = n;
+        tile.appendChild(number);
+        tile.addEventListener('click', () => {
+            pageInput.value = n;
+            update();
+            closeThumbGrid();
+        });
+        grid.appendChild(tile);
+    }
+
+    if (!textOnly) {
+        thumbObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                const tile = entry.target;
+                const n = Number(tile.dataset.page);
+                const thumbnail = tile.querySelector('img');
+                thumbnail.src = `/api/thumb?mag=${encodeURIComponent(mag)}&page=${n - 1}`;
+                thumbObserver.unobserve(tile);
+            });
+        }, { root: grid, rootMargin: '300px' });
+        grid.querySelectorAll('.thumb-tile').forEach((tile) => thumbObserver.observe(tile));
+    }
+    setRovingTabStops(grid, '.thumb-tile');
+    openDialog('thumb-overlay', { initialFocus: (currentTile || grid.querySelector('.thumb-tile')).id, onRequestClose: () => closeThumbGrid() });
+}
+
+function closeThumbGrid(e) {
+    if (e && e.target.id !== 'thumb-overlay' && !e.target.classList.contains('close-modal')) return;
+    if (thumbObserver) thumbObserver.disconnect();
+    thumbObserver = null;
+    closeDialog('thumb-overlay');
+}
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 function toggleSec(id, show) { document.getElementById(id).style.display = show ? 'block' : 'none'; }
 function updateFont(v) {
@@ -2484,6 +2551,7 @@ function showAIDisclaimer() {
 initRovingContainer('lib-grid', '.lib-card', { grid: true });
 initRovingContainer('lib-mag-list', '.mag-list-item');
 initRovingContainer('search-results', '.result-item-main');
+initRovingContainer('thumb-grid', '.thumb-tile', { grid: true });
 initToolbarDragAndDrop();
 restorePreferences();
 init(true);
