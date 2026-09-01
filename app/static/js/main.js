@@ -2259,18 +2259,18 @@ The Search tab has a very smart date filter. You don't need exact days!
 ### ⌨️ Keyboard Shortcuts
 | Group | Shortcut | Action |
 | --- | --- | --- |
-| Reading | `← / →` | Previous / next page |
-| Reading | `Page Up / Page Down` | Scroll the text panel |
-| Reading | `Ctrl/Cmd + + / -` | Zoom the scan in / out |
-| Reading | `Ctrl/Cmd + 0` | Reset zoom to 100% |
-| Reading | `Ctrl/Cmd + Mouse Wheel` | Zoom toward the cursor |
-| Reading | `Enter / Space` (on a highlighted zone) | Jump to that zone's text |
-| Lists & grids | `← → ↑ ↓` | Move between items |
-| Lists & grids | `Home / End` | First / last item |
-| Lists & grids | `Enter / Space` | Open the selected item |
-| Dialogs | `Escape` | Close the top dialog |
-| Dialogs | `Tab / Shift+Tab` | Cycle focus inside the dialog |
-| General | `?` | Open this help window |
+| Reading | \`← / →\` | Previous / next page |
+| Reading | \`Page Up / Page Down\` | Scroll the text panel |
+| Reading | \`Ctrl/Cmd + + / -\` | Zoom the scan in / out |
+| Reading | \`Ctrl/Cmd + 0\` | Reset zoom to 100% |
+| Reading | \`Ctrl/Cmd + Mouse Wheel\` | Zoom toward the cursor |
+| Reading | \`Enter / Space\` (on a highlighted zone) | Jump to that zone's text |
+| Lists & grids | \`← → ↑ ↓\` | Move between items |
+| Lists & grids | \`Home / End\` | First / last item |
+| Lists & grids | \`Enter / Space\` | Open the selected item |
+| Dialogs | \`Escape\` | Close the top dialog |
+| Dialogs | \`Tab / Shift+Tab\` | Cycle focus inside the dialog |
+| General | \`?\` | Open this help window |
 
 ---
 

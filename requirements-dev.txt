@@ -3,3 +3,4 @@
 # behaviour, so floating versions cause "passes locally, fails in CI" drift.
 pytest>=8.0
 ruff>=0.6
+esprima>=4.0
