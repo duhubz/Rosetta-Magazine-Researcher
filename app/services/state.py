@@ -9,7 +9,8 @@ import os
 import secrets
 import threading
 import time
-from typing import Any, Iterator, Optional
+from collections.abc import Iterator
+from typing import Any
 
 import app.config as cfg
 
@@ -37,7 +38,7 @@ _write_lock = threading.Lock()
 _writes_in_progress = 0
 
 # Internal reference to the heartbeat thread
-_heartbeat_thread: Optional[threading.Thread] = None
+_heartbeat_thread: threading.Thread | None = None
 
 
 @contextlib.contextmanager
@@ -66,10 +67,10 @@ def writes_in_progress() -> int:
 def start_heartbeat_monitor() -> None:
     """
     Starts a background thread that monitors the 'LAST_PING' timestamp.
-    
-    If the browser tab is closed, the UI stops sending pings. After the 
-    threshold defined in config (default 180s), this thread signals 
-    SHUTDOWN_EVENT, waits briefly for in-progress writes to finish, and 
+
+    If the browser tab is closed, the UI stops sending pings. After the
+    threshold defined in config (default 180s), this thread signals
+    SHUTDOWN_EVENT, waits briefly for in-progress writes to finish, and
     then exits the process to free up system memory.
     """
     global _heartbeat_thread
@@ -91,6 +92,7 @@ def start_heartbeat_monitor() -> None:
                 # handles and the search-index SQLite connection (flushes WAL).
                 try:
                     from app.services import pdf_cache, search_index
+
                     pdf_cache.close_all()
                     search_index.close_index()
                 except Exception:

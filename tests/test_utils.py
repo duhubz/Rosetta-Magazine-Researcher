@@ -6,8 +6,8 @@ import pytest
 
 from app.utils import atomic_write_bytes, atomic_write_text, get_safe_path, safe_name
 
-
 # --- get_safe_path -----------------------------------------------------------
+
 
 def test_get_safe_path_accepts_nested_relative(workspace):
     data_dir = workspace / "Magazines"
@@ -42,6 +42,7 @@ def test_get_safe_path_rejects_absolute_path(workspace):
 
 
 # --- safe_name ---------------------------------------------------------------
+
 
 def test_safe_name_passthrough():
     assert safe_name("issue_01.pdf") == "issue_01.pdf"
@@ -86,6 +87,7 @@ def test_safe_name_uses_default_when_empty():
 
 
 # --- atomic writes -----------------------------------------------------------
+
 
 def test_atomic_write_text_success(tmp_path):
     target = tmp_path / "out.txt"

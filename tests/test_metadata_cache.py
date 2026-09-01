@@ -53,6 +53,7 @@ def test_concurrent_reload_and_iteration(workspace):
         t.start()
     # Let them contend for a moment
     import time
+
     time.sleep(1.0)
     stop.set()
     for t in threads:

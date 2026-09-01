@@ -9,7 +9,8 @@ def _files_outside(root: Path) -> list[Path]:
     """All files in root's parent that are NOT inside root."""
     parent = root.parent
     return [
-        p for p in parent.rglob("*")
+        p
+        for p in parent.rglob("*")
         if p.is_file() and not p.resolve().is_relative_to(root.resolve())
     ]
 

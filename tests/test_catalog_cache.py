@@ -18,10 +18,13 @@ def _write_catalog(path, items):
 @pytest.fixture
 def community_catalog(workspace):
     path = cfg.catalogs_dir() / "community.json"
-    _write_catalog(path, [
-        {"id": "mag_1", "magazine_name": "Mag One", "cover_url": "https://archive.org/1.jpg"},
-        {"id": "mag_2", "magazine_name": "Mag Two"},
-    ])
+    _write_catalog(
+        path,
+        [
+            {"id": "mag_1", "magazine_name": "Mag One", "cover_url": "https://archive.org/1.jpg"},
+            {"id": "mag_2", "magazine_name": "Mag Two"},
+        ],
+    )
     return path
 
 
@@ -121,9 +124,12 @@ def test_thread_safe_concurrent_access(community_catalog):
             os.utime(community_catalog, (st.st_atime, st.st_mtime + i + 1))
 
     readers = [threading.Thread(target=reader) for _ in range(4)]
-    for t in readers: t.start()
+    for t in readers:
+        t.start()
     w = threading.Thread(target=writer)
-    w.start(); w.join()
+    w.start()
+    w.join()
     stop.set()
-    for t in readers: t.join()
+    for t in readers:
+        t.join()
     assert errors == []

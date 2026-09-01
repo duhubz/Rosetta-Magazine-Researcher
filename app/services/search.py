@@ -18,10 +18,11 @@ logger = logging.getLogger(__name__)
 
 MAX_RESULTS = 200
 
+
 def _normalize_meta_date(d_str: str) -> str:
     """
     Normalizes human-entered dates into a sortable ISO-like format (YYYY-MM-DD).
-    
+
     Handles:
     - 1999 -> 1999-01-01
     - 1999/10 -> 1999-10-01
@@ -42,6 +43,7 @@ def _normalize_meta_date(d_str: str) -> str:
         return f"{parts[0]}-01-01"
     return clean
 
+
 def _fts_quote(term: str) -> str:
     """Escapes a bare term for FTS5 MATCH: double quotes, wrap in quotes.
 
@@ -55,10 +57,12 @@ def _fts_quote(term: str) -> str:
     quoted = '"' + core.replace('"', '""') + '"'
     return quoted + "*" if prefix else quoted
 
+
 def _fts_phrase(phrase: str) -> str:
     """Escapes an exact phrase for FTS5 MATCH (quoted phrase query)."""
     core = phrase.replace('"', '""').strip()
     return f'"{core}"' if core else ""
+
 
 def _build_match_expression(
     or_groups: list[list[str]],
@@ -98,6 +102,7 @@ def _build_match_expression(
         if q:
             expr = f"({expr} NOT {q})"
     return expr
+
 
 def search(
     query: str,
@@ -144,9 +149,7 @@ def search(
     or_groups = [grp.split() for grp in pos_query.split(" OR ") if grp.split()]
 
     # List of terms for the UI to highlight in red
-    highlight_list = exact_phrases + [
-        t.replace("*", "") for t in pos_terms_raw if t != "OR"
-    ]
+    highlight_list = exact_phrases + [t.replace("*", "") for t in pos_terms_raw if t != "OR"]
 
     match_expr = _build_match_expression(or_groups, exact_phrases, neg_terms, neg_exact)
     if not match_expr:
@@ -166,11 +169,15 @@ def search(
                 continue
         if date_start or date_end:
             m_date = meta.get("date", "")
-            if not m_date: continue
+            if not m_date:
+                continue
             norm_m_date = _normalize_meta_date(m_date)
-            if not norm_m_date: continue
-            if date_start and norm_m_date < date_start: continue
-            if date_end and norm_m_date > date_end: continue
+            if not norm_m_date:
+                continue
+            if date_start and norm_m_date < date_start:
+                continue
+            if date_end and norm_m_date > date_end:
+                continue
         allowed.add(mag_rel_path)
 
     if not allowed:
@@ -193,8 +200,14 @@ def search(
                 if pdf_path not in allowed:
                     continue
                 if restrict_sections and not _matches_sections(
-                    text, inc_jp, inc_en, inc_sum,
-                    or_groups, exact_phrases, neg_terms, neg_exact,
+                    text,
+                    inc_jp,
+                    inc_en,
+                    inc_sum,
+                    or_groups,
+                    exact_phrases,
+                    neg_terms,
+                    neg_exact,
                 ):
                     continue
                 results.append({"mag": pdf_path, "page": int(page), "snippet": snip})
@@ -206,6 +219,7 @@ def search(
             return [], highlight_list
 
     return results, highlight_list
+
 
 def _matches_sections(
     text: str,
@@ -225,20 +239,28 @@ def _matches_sections(
     """
     jp_text, en_text, sum_text = split_sections(text)
     searchable = ""
-    if inc_jp: searchable += jp_text + " "
-    if inc_en: searchable += en_text + " "
-    if inc_sum: searchable += sum_text + " "
+    if inc_jp:
+        searchable += jp_text + " "
+    if inc_en:
+        searchable += en_text + " "
+    if inc_sum:
+        searchable += sum_text + " "
     if not searchable.strip():
         return False
     blob = searchable.lower()
 
-    if any(nep.lower() in blob for nep in neg_exact): return False
-    if any(nt.lower() in blob for nt in neg_terms): return False
-    if any(ep.lower() not in blob for ep in exact_phrases): return False
+    if any(nep.lower() in blob for nep in neg_exact):
+        return False
+    if any(nt.lower() in blob for nt in neg_terms):
+        return False
+    if any(ep.lower() not in blob for ep in exact_phrases):
+        return False
 
     if or_groups:
+
         def term_to_regex(term: str) -> str:
             return re.escape(term.lower()).replace(r"\*", ".*")
+
         for grp in or_groups:
             if all(re.search(term_to_regex(t), blob) for t in grp):
                 return True

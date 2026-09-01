@@ -4,8 +4,8 @@ import json
 
 from app.services import state
 
-
 # --- Query/body validation ---------------------------------------------------
+
 
 def test_render_non_numeric_page_is_400(client):
     res = client.get("/api/render?mag=Some/mag.pdf&page=abc")
@@ -72,9 +72,8 @@ def test_uninstall_missing_filename_is_400(client, token_headers):
 
 # --- Uninstall exact-basename matching (C1) ----------------------------------
 
-def test_uninstall_suffix_match_does_not_delete_other_file(
-    client, token_headers, workspace
-):
+
+def test_uninstall_suffix_match_does_not_delete_other_file(client, token_headers, workspace):
     """'game.pdf' must NOT match (or delete) 'Endgame.pdf'."""
     data_dir = workspace / "Magazines"
     mag_dir = data_dir / "EndgameMag"
@@ -83,9 +82,7 @@ def test_uninstall_suffix_match_does_not_delete_other_file(
     endgame.write_bytes(b"pdf content")
     state.METADATA_CACHE = {"EndgameMag/Endgame.pdf": {"name": "Endgame"}}
 
-    res = client.post(
-        "/api/uninstall", json={"pdf_filename": "game.pdf"}, headers=token_headers
-    )
+    res = client.post("/api/uninstall", json={"pdf_filename": "game.pdf"}, headers=token_headers)
     assert res.status_code == 404
     assert endgame.exists(), "Endgame.pdf was wrongly deleted by a suffix match"
 
@@ -98,14 +95,13 @@ def test_uninstall_exact_match_deletes(client, token_headers, workspace):
     endgame.write_bytes(b"pdf content")
     state.METADATA_CACHE = {"EndgameMag/Endgame.pdf": {"name": "Endgame"}}
 
-    res = client.post(
-        "/api/uninstall", json={"pdf_filename": "Endgame.pdf"}, headers=token_headers
-    )
+    res = client.post("/api/uninstall", json={"pdf_filename": "Endgame.pdf"}, headers=token_headers)
     assert res.status_code == 200
     assert not endgame.exists()
 
 
 # --- Session token + Host checks (step 5) -------------------------------------
+
 
 def test_non_get_without_token_is_403(client):
     res = client.post("/api/download", json={"id": "x"})
@@ -113,9 +109,7 @@ def test_non_get_without_token_is_403(client):
 
 
 def test_non_get_with_wrong_token_is_403(client):
-    res = client.post(
-        "/api/download", json={"id": "x"}, headers={"X-Rosetta-Token": "wrong"}
-    )
+    res = client.post("/api/download", json={"id": "x"}, headers={"X-Rosetta-Token": "wrong"})
     assert res.status_code == 403
 
 
@@ -154,6 +148,7 @@ def test_index_injects_csrf_meta_tag(client, token):
 
 # --- Bookmarks happy path (behavior preserved) --------------------------------
 
+
 def test_bookmarks_roundtrip(client, token_headers, workspace):
     res = client.post(
         "/api/bookmarks",
@@ -176,6 +171,7 @@ def test_bookmarks_roundtrip(client, token_headers, workspace):
 
 
 # --- FTS5 search endpoint + index integration ---------------------------------
+
 
 def _install_searchable_mag(workspace):
     from app.services import metadata, search_index
@@ -227,28 +223,42 @@ def test_uninstall_removes_from_search_index(client, token_headers, workspace):
 
     _install_searchable_mag(workspace)
     conn = search_index.get_index()
-    assert conn.execute("SELECT count(*) FROM pages WHERE pdf_path=?",
-                        ("SearchMag/Issue.pdf",)).fetchone()[0] == 1
-
-    res = client.post(
-        "/api/uninstall", json={"pdf_filename": "Issue.pdf"}, headers=token_headers
+    assert (
+        conn.execute(
+            "SELECT count(*) FROM pages WHERE pdf_path=?", ("SearchMag/Issue.pdf",)
+        ).fetchone()[0]
+        == 1
     )
+
+    res = client.post("/api/uninstall", json={"pdf_filename": "Issue.pdf"}, headers=token_headers)
     assert res.status_code == 200
     conn = search_index.get_index()
-    assert conn.execute("SELECT count(*) FROM pages WHERE pdf_path=?",
-                        ("SearchMag/Issue.pdf",)).fetchone()[0] == 0
-    assert conn.execute("SELECT count(*) FROM index_meta WHERE pdf_path=?",
-                        ("SearchMag/Issue.pdf",)).fetchone()[0] == 0
+    assert (
+        conn.execute(
+            "SELECT count(*) FROM pages WHERE pdf_path=?", ("SearchMag/Issue.pdf",)
+        ).fetchone()[0]
+        == 0
+    )
+    assert (
+        conn.execute(
+            "SELECT count(*) FROM index_meta WHERE pdf_path=?", ("SearchMag/Issue.pdf",)
+        ).fetchone()[0]
+        == 0
+    )
 
 
 def test_save_reindexes_magazine(client, token_headers, workspace):
-    from app.services import search_index
 
     _install_searchable_mag(workspace)
     res = client.post(
         "/api/save",
-        json={"mag": "SearchMag/Issue.pdf", "page": 1,
-              "jp": "Fresh gradius strategy", "en": "translated", "sum": ""},
+        json={
+            "mag": "SearchMag/Issue.pdf",
+            "page": 1,
+            "jp": "Fresh gradius strategy",
+            "en": "translated",
+            "sum": "",
+        },
         headers=token_headers,
     )
     assert res.status_code == 200

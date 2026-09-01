@@ -7,7 +7,6 @@ tried), and a fully-blocked waterfall ends in a clear error state.
 
 import io
 import logging
-import urllib.request
 
 import pytest
 
@@ -36,24 +35,29 @@ class _FakeResponse:
 
 @pytest.fixture
 def fetched_urls(monkeypatch):
-    """Mock urllib.request.urlopen; record every URL actually fetched."""
+    """Mock the single-hop opener (app.utils._open_no_redirect, used by
+    safe_urlopen); record every URL actually fetched."""
     urls: list[str] = []
 
-    def fake_urlopen(req, timeout=None):
+    def fake_open(req, timeout=None):
         urls.append(req.full_url if hasattr(req, "full_url") else str(req))
         return _FakeResponse()
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("app.utils._open_no_redirect", fake_open)
     return urls
 
 
 def _seed_task(task_id: str) -> None:
     state.DOWNLOAD_STATE[task_id] = {
-        "status": "Initializing...", "progress": 0, "error": None, "done": False,
+        "status": "Initializing...",
+        "progress": 0,
+        "error": None,
+        "done": False,
     }
 
 
 # --- waterfall-level behavior --------------------------------------------------
+
 
 def test_file_url_rejected_and_logged_next_source_used(workspace, fetched_urls, caplog):
     """file:///etc/passwd is never fetched; the waterfall moves on to the
@@ -88,11 +92,14 @@ def test_non_allowlisted_host_rejected_and_logged(workspace, fetched_urls, caplo
     assert "host not in allowlist" in caplog.text
 
 
-@pytest.mark.parametrize("url", [
-    "https://archive.org/download/item/x.pdf",
-    "https://ia801408.us.archive.org/12/items/x/x.pdf",
-    "https://www.gamingalexandria.com/files/x.pdf",
-])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://archive.org/download/item/x.pdf",
+        "https://ia801408.us.archive.org/12/items/x/x.pdf",
+        "https://www.gamingalexandria.com/files/x.pdf",
+    ],
+)
 def test_allowlisted_hosts_are_fetched(workspace, fetched_urls, url):
     out = workspace / "Magazines" / "out.pdf"
     _seed_task("t_ok")
@@ -139,6 +146,7 @@ def test_bypass_flag_allows_any_host_but_not_file(workspace, fetched_urls, monke
 
 # --- worker-level (end state) behavior ------------------------------------------
 
+
 def test_all_sources_blocked_ends_in_error_state(workspace, fetched_urls, sample_catalog_item):
     """If every pdf_sources entry is blocked, nothing is fetched and the job
     ends done=True with an actionable error message."""
@@ -178,7 +186,9 @@ def test_zip_sources_follow_same_rules(workspace, fetched_urls, sample_catalog_i
     assert "http://evil.com/data.zip" in caplog.text
 
 
-def test_zip_waterfall_skips_blocked_mirror_and_installs(workspace, fetched_urls, sample_catalog_item):
+def test_zip_waterfall_skips_blocked_mirror_and_installs(
+    workspace, fetched_urls, sample_catalog_item
+):
     """A blocked ZIP mirror is skipped in favor of an allowlisted one and the
     install completes without error (waterfall semantics preserved)."""
     item = dict(

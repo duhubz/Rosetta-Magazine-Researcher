@@ -23,7 +23,6 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 import app.config as cfg
 from app.services import metadata, state
@@ -47,8 +46,8 @@ CREATE TABLE IF NOT EXISTS index_meta (
 
 # Module-level singleton connection, guarded by _LOCK for every operation.
 _LOCK = threading.RLock()
-_conn: Optional[sqlite3.Connection] = None
-_conn_db_path: Optional[Path] = None
+_conn: sqlite3.Connection | None = None
+_conn_db_path: Path | None = None
 
 
 class IndexUnavailableError(RuntimeError):
@@ -120,6 +119,7 @@ def close_index() -> None:
 
 # --- Source collection -------------------------------------------------------
 
+
 def _collect_pages(pdf_rel_path: str) -> tuple[dict[int, str], float]:
     """
     Reads all transcription text for one magazine and the newest source mtime.
@@ -160,7 +160,11 @@ def _collect_pages(pdf_rel_path: str) -> tuple[dict[int, str], float]:
             with zipfile.ZipFile(partner_zip, "r") as z:
                 names = z.namelist()
                 master_zname = next(
-                    (n for n in names if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()),
+                    (
+                        n
+                        for n in names
+                        if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()
+                    ),
                     None,
                 )
                 if master_zname:
@@ -168,11 +172,15 @@ def _collect_pages(pdf_rel_path: str) -> tuple[dict[int, str], float]:
                     for p_num, p_text in zip_pages.items():
                         pages.setdefault(p_num, p_text)  # loose page files win
                 else:
-                    pattern = re.compile(rf"^{re.escape(pdf_path.stem)}_p(\d+)\.txt$", re.IGNORECASE)
+                    pattern = re.compile(
+                        rf"^{re.escape(pdf_path.stem)}_p(\d+)\.txt$", re.IGNORECASE
+                    )
                     for zname in names:
                         m = pattern.search(zname.split("/")[-1])
                         if m:
-                            pages.setdefault(int(m.group(1)), z.read(zname).decode("utf-8", errors="ignore"))
+                            pages.setdefault(
+                                int(m.group(1)), z.read(zname).decode("utf-8", errors="ignore")
+                            )
         except Exception as e:
             logger.warning(f"Could not read partner ZIP for {pdf_rel_path}: {e}")
 
@@ -180,6 +188,7 @@ def _collect_pages(pdf_rel_path: str) -> tuple[dict[int, str], float]:
 
 
 # --- Index maintenance -------------------------------------------------------
+
 
 def index_magazine(conn: sqlite3.Connection, pdf_rel_path: str) -> None:
     """
@@ -307,6 +316,7 @@ def _collect_pages_mtime_only(pdf_rel_path: str) -> tuple[None, float]:
 
 
 # --- Convenience wrappers (used by routes / workers) --------------------------
+
 
 def init_index() -> None:
     """

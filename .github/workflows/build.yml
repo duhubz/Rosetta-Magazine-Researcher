@@ -8,10 +8,53 @@ on:
     branches: 
       - main
       - master
+  pull_request:
   workflow_dispatch:
 
 jobs:
+  # -------------------------------------------------------------
+  # VERIFY: fast pytest + lint gate. Runs before the multi-OS
+  # pyinstaller matrix so broken PRs don't burn build minutes.
+  # -------------------------------------------------------------
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-py311-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+        restore-keys: |
+          pip-${{ runner.os }}-py311-
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt -r requirements-dev.txt
+
+    - name: Ruff Lint
+      run: ruff check .
+
+    - name: Ruff Format Check
+      run: ruff format --check .
+
+    - name: Run Tests
+      run: pytest -q --tb=short
+
+    - name: Import Smoke Test
+      run: python -c "from app import create_app; create_app()"
+
   build:
+    needs: verify
     strategy:
       fail-fast: false
       matrix:

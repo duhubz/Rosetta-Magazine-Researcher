@@ -21,6 +21,7 @@ def pdf_factory(tmp_path):
         doc.save(str(path))
         doc.close()
         return path
+
     return make
 
 
@@ -69,8 +70,10 @@ def test_per_doc_lock_serializes_concurrent_access(pdf_factory):
                 events.append((tag, "exit"))
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(4)]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     # Strict serialization: every 'enter' is immediately followed by the
     # same thread's 'exit' — no interleaving on the same document.
@@ -82,8 +85,10 @@ def test_per_doc_lock_serializes_concurrent_access(pdf_factory):
 
 def test_evict_closes_specific_document(pdf_factory):
     p1, p2 = pdf_factory("a.pdf"), pdf_factory("b.pdf")
-    with pdf_cache.get_doc(p1) as d1: pass
-    with pdf_cache.get_doc(p2) as d2: pass
+    with pdf_cache.get_doc(p1) as d1:
+        pass
+    with pdf_cache.get_doc(p2) as d2:
+        pass
     pdf_cache.evict(p1)
     assert d1.is_closed
     assert not d2.is_closed

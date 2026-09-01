@@ -4,16 +4,15 @@ Handles portable path resolution and deep-merging of yaml configurations.
 """
 
 import sys
-import os
 from pathlib import Path
-from typing import Any, Optional  # Added Optional here to fix the NameError
+from typing import Any  # Added Optional here to fix the NameError
 
 # --- PORTABLE PATH LOGIC ---
 if getattr(sys, "frozen", False):
     # If running as a bundled executable
     exe_path = Path(sys.executable).resolve()
-    
-    # MAC BUNDLE FIX: 
+
+    # MAC BUNDLE FIX:
     # If we are inside a Mac .app (Rosetta.app/Contents/MacOS/Rosetta)
     # we need to step up 3 levels to get to the folder containing the .app
     if "Contents/MacOS" in str(exe_path):
@@ -24,7 +23,7 @@ else:
     # If running in a dev environment
     ROOT_DIR = Path(__file__).resolve().parent.parent
 
-_config: Optional[dict[str, Any]] = None
+_config: dict[str, Any] | None = None
 
 # Hosts the backend is allowed to fetch from (catalogs, covers, and
 # magazine/data-ZIP download sources). Overridable via config.yaml:
@@ -35,6 +34,7 @@ DEFAULT_ALLOWED_FETCH_HOSTS = [
     "archive.org",
     "*.archive.org",
 ]
+
 
 def _default_config() -> dict[str, Any]:
     """Provides fallback values if config.yaml is missing."""
@@ -72,8 +72,10 @@ def _default_config() -> dict[str, Any]:
         "security": {
             "allowed_fetch_hosts": list(DEFAULT_ALLOWED_FETCH_HOSTS),
             "allow_downloads_from_any_host": False,
+            "max_redirects": 5,
         },
     }
+
 
 def get_config() -> dict[str, Any]:
     """Return the loaded configuration (cached)."""
@@ -81,6 +83,7 @@ def get_config() -> dict[str, Any]:
     if _config is None:
         try:
             import yaml
+
             config = _default_config()
             for filename in ("config.yaml", "config.local.yaml"):
                 p = ROOT_DIR / filename
@@ -99,32 +102,84 @@ def get_config() -> dict[str, Any]:
             _config = _default_config()
     return _config
 
+
 def get_path(key: str) -> Path:
     """Resolve a path key (e.g. data_dir) to an absolute Path relative to ROOT_DIR."""
     paths = get_config().get("paths", {})
     value = paths.get(key, "")
     return (ROOT_DIR / value).resolve()
 
+
 # --- CONVENIENCE ACCESSORS ---
-def data_dir() -> Path: return get_path("data_dir")
-def bookmarks_file() -> Path: return get_path("bookmarks_file")
-def catalog_file() -> Path: return get_path("catalog_file")
-def catalogs_dir() -> Path: return get_path("catalogs_dir")
-def covers_dir() -> Path: return get_path("covers_dir")
-def catalog_urls() -> list[str]: return get_config().get("catalog", {}).get("urls", [])
-def server_port() -> int: return int(get_config().get("server", {}).get("port", 18028))
-def server_dev_mode() -> bool: return bool(get_config().get("server", {}).get("dev_mode", False))
-def download_timeout() -> int: return int(get_config().get("download", {}).get("timeout_seconds", 60))
-def catalog_fetch_timeout() -> int: return int(get_config().get("download", {}).get("catalog_fetch_timeout", 10))
-def cover_fetch_timeout() -> int: return int(get_config().get("download", {}).get("cover_fetch_timeout", 5))
-def heartbeat_shutdown_seconds() -> int: return int(get_config().get("heartbeat", {}).get("shutdown_after_idle_seconds", 180))
-def heartbeat_check_interval() -> int: return int(get_config().get("heartbeat", {}).get("check_interval_seconds", 5))
-def search_index_file() -> str: return str(get_config().get("search", {}).get("index_file", ".rosetta_index.db"))
-def search_rebuild_on_startup() -> bool: return bool(get_config().get("search", {}).get("rebuild_on_startup", False))
-def pdf_cache_max_open_documents() -> int: return int(get_config().get("pdf_cache", {}).get("max_open_documents", 2))
+def data_dir() -> Path:
+    return get_path("data_dir")
+
+
+def bookmarks_file() -> Path:
+    return get_path("bookmarks_file")
+
+
+def catalog_file() -> Path:
+    return get_path("catalog_file")
+
+
+def catalogs_dir() -> Path:
+    return get_path("catalogs_dir")
+
+
+def covers_dir() -> Path:
+    return get_path("covers_dir")
+
+
+def catalog_urls() -> list[str]:
+    return get_config().get("catalog", {}).get("urls", [])
+
+
+def server_port() -> int:
+    return int(get_config().get("server", {}).get("port", 18028))
+
+
+def server_dev_mode() -> bool:
+    return bool(get_config().get("server", {}).get("dev_mode", False))
+
+
+def download_timeout() -> int:
+    return int(get_config().get("download", {}).get("timeout_seconds", 60))
+
+
+def catalog_fetch_timeout() -> int:
+    return int(get_config().get("download", {}).get("catalog_fetch_timeout", 10))
+
+
+def cover_fetch_timeout() -> int:
+    return int(get_config().get("download", {}).get("cover_fetch_timeout", 5))
+
+
+def heartbeat_shutdown_seconds() -> int:
+    return int(get_config().get("heartbeat", {}).get("shutdown_after_idle_seconds", 180))
+
+
+def heartbeat_check_interval() -> int:
+    return int(get_config().get("heartbeat", {}).get("check_interval_seconds", 5))
+
+
+def search_index_file() -> str:
+    return str(get_config().get("search", {}).get("index_file", ".rosetta_index.db"))
+
+
+def search_rebuild_on_startup() -> bool:
+    return bool(get_config().get("search", {}).get("rebuild_on_startup", False))
+
+
+def pdf_cache_max_open_documents() -> int:
+    return int(get_config().get("pdf_cache", {}).get("max_open_documents", 2))
+
+
 def allowed_fetch_hosts() -> list[str]:
     hosts = get_config().get("security", {}).get("allowed_fetch_hosts")
     return list(hosts) if hosts else list(DEFAULT_ALLOWED_FETCH_HOSTS)
+
+
 def allow_downloads_from_any_host() -> bool:
     """Advanced opt-out: skip the host allowlist for magazine/ZIP downloads.
 
@@ -132,3 +187,12 @@ def allow_downloads_from_any_host() -> bool:
     http/https are always rejected regardless of this flag.
     """
     return bool(get_config().get("security", {}).get("allow_downloads_from_any_host", False))
+
+
+def max_redirects() -> int:
+    """Maximum HTTP redirects followed per fetch (utils.safe_urlopen).
+
+    Every redirect hop is re-validated against the fetch allowlist before
+    it is followed.
+    """
+    return int(get_config().get("security", {}).get("max_redirects", 5))

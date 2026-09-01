@@ -14,9 +14,7 @@ def _make_magazine(data_dir, folder, stem, pages):
     mag_dir = data_dir / folder
     mag_dir.mkdir(parents=True, exist_ok=True)
     (mag_dir / f"{stem}.pdf").write_bytes(b"%PDF-1.4 fake")
-    master = "\n\n".join(
-        f"[[PAGE_{str(p).zfill(3)}]]\n{text}" for p, text in sorted(pages.items())
-    )
+    master = "\n\n".join(f"[[PAGE_{str(p).zfill(3)}]]\n{text}" for p, text in sorted(pages.items()))
     (mag_dir / f"{stem}_COMPLETE.txt").write_text(master, encoding="utf-8")
     return mag_dir
 
@@ -25,13 +23,23 @@ def _make_magazine(data_dir, folder, stem, pages):
 def library(workspace):
     """A small two-magazine library, metadata cache loaded, index built."""
     data_dir = cfg.data_dir()
-    _make_magazine(data_dir, "TestMag/1992-10 - Vol 1", "Issue1", {
-        1: "Welcome to the café résumé edition\n#GA-TRANSLATION\nHello world translation\n#GA-SUMMARY\nA short summary",
-        2: "Second page about Mario games and consoles",
-    })
-    _make_magazine(data_dir, "OtherMag", "Other1", {
-        1: "Completely different content about Zelda",
-    })
+    _make_magazine(
+        data_dir,
+        "TestMag/1992-10 - Vol 1",
+        "Issue1",
+        {
+            1: "Welcome to the café résumé edition\n#GA-TRANSLATION\nHello world translation\n#GA-SUMMARY\nA short summary",
+            2: "Second page about Mario games and consoles",
+        },
+    )
+    _make_magazine(
+        data_dir,
+        "OtherMag",
+        "Other1",
+        {
+            1: "Completely different content about Zelda",
+        },
+    )
     metadata.load_metadata_cache()
     conn = search_index.get_index()
     search_index.rebuild_all(conn)
@@ -40,14 +48,22 @@ def library(workspace):
 
 def _search(q, **kw):
     args = dict(
-        scope="global", inc_jp=True, inc_en=True, inc_sum=True,
-        current_mag="", mag_filter="", date_start="", date_end="", tag_filter="",
+        scope="global",
+        inc_jp=True,
+        inc_en=True,
+        inc_sum=True,
+        current_mag="",
+        mag_filter="",
+        date_start="",
+        date_end="",
+        tag_filter="",
     )
     args.update(kw)
     return search.search(q, **args)
 
 
 # --- Indexing ------------------------------------------------------------------
+
 
 def test_rebuild_indexes_all_pages(library):
     conn = search_index.get_index()
@@ -119,9 +135,7 @@ def test_refresh_stale_full_rebuilds_empty_index(library):
 
 
 def test_refresh_stale_drops_vanished_magazines(library):
-    state.METADATA_CACHE = {
-        k: v for k, v in state.METADATA_CACHE.items() if "OtherMag" not in k
-    }
+    state.METADATA_CACHE = {k: v for k, v in state.METADATA_CACHE.items() if "OtherMag" not in k}
     search_index.refresh_stale(search_index.get_index())
     assert _search("zelda")[0] == []
     assert len(_search("mario")[0]) == 1
@@ -147,17 +161,21 @@ def test_index_magazine_after_save_style_update(library):
 
 # --- Robustness ------------------------------------------------------------------
 
-@pytest.mark.parametrize("evil", [
-    '" OR 1=1 --',
-    "'); DROP TABLE pages; --",
-    'AND OR NOT ( ) " * ^',
-    'NEAR(a b)',
-    '\\\'"`{};',
-    '-"only a negation"',
-    "***",
-    "",
-    "   ",
-])
+
+@pytest.mark.parametrize(
+    "evil",
+    [
+        '" OR 1=1 --',
+        "'); DROP TABLE pages; --",
+        'AND OR NOT ( ) " * ^',
+        "NEAR(a b)",
+        "\\'\"`{};",
+        '-"only a negation"',
+        "***",
+        "",
+        "   ",
+    ],
+)
 def test_malicious_queries_do_not_blow_up(library, evil):
     results, highlights = _search(evil)
     assert isinstance(results, list)
