@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 import app.config as cfg
-from app.services import metadata, state
+from app.services import metadata, state, zip_utils
 from app.services.text_utils import split_pages
 
 logger = logging.getLogger(__name__)
@@ -159,14 +159,7 @@ def _collect_pages(pdf_rel_path: str) -> tuple[dict[int, str], float]:
             mtimes.append(partner_zip.stat().st_mtime)
             with zipfile.ZipFile(partner_zip, "r") as z:
                 names = z.namelist()
-                master_zname = next(
-                    (
-                        n
-                        for n in names
-                        if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()
-                    ),
-                    None,
-                )
+                master_zname = zip_utils.find_member_by_basename(z, f"{pdf_path.stem}_COMPLETE.txt")
                 if master_zname:
                     zip_pages = split_pages(z.read(master_zname).decode("utf-8", errors="ignore"))
                     for p_num, p_text in zip_pages.items():

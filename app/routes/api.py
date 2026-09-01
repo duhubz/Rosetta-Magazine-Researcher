@@ -142,9 +142,7 @@ def get_text() -> Response:
     if partner_zip:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
-                meta_file = next(
-                    (n for n in z.namelist() if n.split("/")[-1].lower() == "metadata.txt"), None
-                )
+                meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
                 if meta_file:
                     raw_meta = z.read(meta_file).decode("utf-8", errors="ignore")
         except Exception:
@@ -161,14 +159,7 @@ def get_text() -> Response:
     if partner_zip:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
-                z_c = next(
-                    (
-                        n
-                        for n in z.namelist()
-                        if n.split("/")[-1].lower() == coords_filename.lower()
-                    ),
-                    None,
-                )
+                z_c = zip_utils.find_member_by_basename(z, coords_filename)
                 if z_c:
                     all_coords = json.loads(z.read(z_c).decode("utf-8"))
                     coords_data = next(
@@ -242,21 +233,17 @@ def save_text() -> Response:
                 master_path = None
 
             # 1. Update Content (Master File or Page Files)
-            if master_path or (
-                partner_zip
-                and any(
-                    n.split("/")[-1].lower() == master_filename.lower()
-                    for n in zipfile.ZipFile(partner_zip, "r").namelist()
-                )
-            ):
+            zip_has_master = False
+            if master_path is None and partner_zip:
+                with zipfile.ZipFile(partner_zip, "r") as z:
+                    zip_has_master = (
+                        zip_utils.find_member_by_basename(z, master_filename) is not None
+                    )
+            if master_path or zip_has_master:
                 raw_text = master_path.read_text(encoding="utf-8") if master_path else ""
                 if not raw_text and partner_zip:
                     with zipfile.ZipFile(partner_zip, "r") as z:
-                        z_m = next(
-                            n
-                            for n in z.namelist()
-                            if n.split("/")[-1].lower() == master_filename.lower()
-                        )
+                        z_m = zip_utils.find_member_by_basename(z, master_filename)
                         raw_text = z.read(z_m).decode("utf-8")
 
                 pages = metadata.get_pages_from_master(raw_text)
@@ -295,14 +282,7 @@ def save_text() -> Response:
                 if partner_zip:
                     try:
                         with zipfile.ZipFile(partner_zip, "r") as z:
-                            z_c = next(
-                                (
-                                    n
-                                    for n in z.namelist()
-                                    if n.split("/")[-1].lower() == c_fn.lower()
-                                ),
-                                None,
-                            )
+                            z_c = zip_utils.find_member_by_basename(z, c_fn)
                             if z_c:
                                 all_c = json.loads(z.read(z_c).decode("utf-8"))
                     except Exception:

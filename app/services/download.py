@@ -166,9 +166,7 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
     if success_zip and zip_temp.exists():
         try:
             with zipfile.ZipFile(zip_temp, "r") as z:
-                meta_file = next(
-                    (n for n in z.namelist() if n.split("/")[-1].lower() == "metadata.txt"), None
-                )
+                meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
                 if meta_file:
                     meta = metadata.parse_metadata(
                         z.read(meta_file).decode("utf-8", errors="ignore")

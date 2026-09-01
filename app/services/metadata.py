@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import app.config as cfg
-from app.services import state
+from app.services import state, zip_utils
 from app.services.text_utils import split_pages
 from app.utils import has_hidden_component
 
@@ -116,10 +116,7 @@ def load_metadata_cache() -> None:
         if partner_zip:
             try:
                 with zipfile.ZipFile(partner_zip, "r") as z:
-                    meta_file = next(
-                        (n for n in z.namelist() if n.split("/")[-1].lower() == "metadata.txt"),
-                        None,
-                    )
+                    meta_file = zip_utils.find_member_by_basename(z, "metadata.txt")
                     if meta_file:
                         meta = parse_metadata(z.read(meta_file).decode("utf-8", errors="ignore"))
             except Exception:
@@ -162,14 +159,7 @@ def get_transcription_text(pdf_rel_path: str, page_str: str) -> str | None:
         try:
             with zipfile.ZipFile(partner_zip, "r") as z:
                 # Check for Master File in ZIP
-                master_zname = next(
-                    (
-                        n
-                        for n in z.namelist()
-                        if n.split("/")[-1].lower() == f"{pdf_path.stem}_complete.txt".lower()
-                    ),
-                    None,
-                )
+                master_zname = zip_utils.find_member_by_basename(z, f"{pdf_path.stem}_COMPLETE.txt")
                 if master_zname:
                     pages = get_pages_from_master(
                         z.read(master_zname).decode("utf-8", errors="ignore")
