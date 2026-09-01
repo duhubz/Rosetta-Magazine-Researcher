@@ -156,7 +156,9 @@ async function update(targetPage = null, searchTerms = null) {
     document.getElementById('page-title').innerText = "Loading Issue...";
     
     // Request Image
-    img.src = `/api/render?mag=${encodeURIComponent(mag)}&page=${page-1}&zoom=1.5&t=${Date.now()}`;
+    currentRenderZoom = 1.5;
+    currentRenderToken = Date.now();
+    img.src = `/api/render?mag=${encodeURIComponent(mag)}&page=${page-1}&zoom=1.5&t=${currentRenderToken}`;
     adjustImgZoom(0);
 
     // Request Text & Metadata
@@ -197,23 +199,80 @@ function changePage(d) {
 // --- 3. VIEWER ZOOM & PANNING LOGIC ---
 // ==========================================
 let currentImgZoom = 100;
+let currentRenderZoom = 1.5;
+let currentRenderToken = 0;
+let hiResTimer = null;
 
-function adjustImgZoom(delta) {
-    setImgZoom(currentImgZoom + delta);
+function adjustImgZoom(delta, anchor = null) {
+    setImgZoom(currentImgZoom + delta, anchor);
 }
 
-function setImgZoom(val) {
+function setImgZoom(val, anchor = null) {
     let num = parseInt(String(val).replace('%', ''));
     if (isNaN(num)) num = 100;
-    
+
     currentImgZoom = Math.max(30, Math.min(num, 500));
-    
-    const img = document.getElementById('page-img');
+
     const leftPanel = document.getElementById('left');
-    const safeHeight = leftPanel.clientHeight - 40; 
-    
+    const safeHeight = leftPanel.clientHeight - 40;
+
+    // Default anchor: center of the viewer panel
+    const panelRect = leftPanel.getBoundingClientRect();
+    if (!anchor) {
+        anchor = { x: panelRect.left + leftPanel.clientWidth / 2,
+                   y: panelRect.top + leftPanel.clientHeight / 2 };
+    }
+
+    // Record which fraction of the image sits under the anchor (pre-resize)
+    const r1 = img.getBoundingClientRect();
+    const hasLayout = r1.width > 0 && r1.height > 0;
+    const fx = hasLayout ? Math.min(Math.max((anchor.x - r1.left) / r1.width, 0), 1) : 0.5;
+    const fy = hasLayout ? Math.min(Math.max((anchor.y - r1.top) / r1.height, 0), 1) : 0.5;
+
     img.style.height = `${safeHeight * (currentImgZoom / 100)}px`;
+
+    // Keep the anchored image point stationary under the cursor
+    if (hasLayout) {
+        const r2 = img.getBoundingClientRect();
+        leftPanel.scrollLeft += (r2.left + fx * r2.width) - anchor.x;
+        leftPanel.scrollTop += (r2.top + fy * r2.height) - anchor.y;
+    }
+
     document.getElementById('zoom-input').value = `${currentImgZoom}%`;
+    scheduleHiResRender();
+}
+
+function scheduleHiResRender() {
+    clearTimeout(hiResTimer);
+    hiResTimer = setTimeout(refreshRenderZoom, 350);
+}
+
+function refreshRenderZoom() {
+    const mag = magSelect.value;
+    if (!mag || !img.src || !img.naturalHeight) return;
+
+    // Height of the PDF page in px at server zoom 1.0
+    const baseHeight = img.naturalHeight / currentRenderZoom;
+    const displayedHeight = img.clientHeight;
+    if (!displayedHeight || !baseHeight) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    // Snap UP to the next 0.5 step so small zoom changes reuse the same render
+    let desired = Math.ceil((displayedHeight * dpr / baseHeight) * 2) / 2;
+    desired = Math.max(1.5, Math.min(desired, 4.0)); // server clamps at 4.0
+    if (desired === currentRenderZoom) return;
+
+    const page = pageInput.value;
+    const token = currentRenderToken;
+    const url = `/api/render?mag=${encodeURIComponent(mag)}&page=${page - 1}&zoom=${desired}&t=${token}`;
+    const pre = new Image();
+    pre.onload = () => {
+        // Abandon if the user changed page/magazine while we were loading
+        if (token !== currentRenderToken) return;
+        img.src = url;          // same URL -> served from browser cache
+        currentRenderZoom = desired;
+    };
+    pre.src = url;
 }
 
 window.addEventListener('resize', () => {
@@ -224,9 +283,15 @@ window.addEventListener('resize', () => {
 document.getElementById('left').addEventListener('wheel', (e) => {
     if (e.ctrlKey || e.metaKey) {
         e.preventDefault(); 
-        adjustImgZoom(e.deltaY < 0 ? 10 : -10);
+        adjustImgZoom(e.deltaY < 0 ? 10 : -10, { x: e.clientX, y: e.clientY });
     }
 }, { passive: false });
+
+const zoomInput = document.getElementById('zoom-input');
+zoomInput.addEventListener('change', () => setImgZoom(zoomInput.value));
+zoomInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); setImgZoom(zoomInput.value); zoomInput.blur(); }
+});
 
 
 // ==========================================

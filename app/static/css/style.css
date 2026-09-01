@@ -81,13 +81,11 @@ body {
     box-sizing: border-box;
     overflow: auto; 
     display: flex; 
-    align-items: center; 
-    justify-content: center; /* Flexbox centering */
 }
 
 #img-container { 
     position: relative; 
-    margin: auto; /* Prevents Flexbox from clipping top/left when zoomed in */
+    margin: auto; /* Handles centering and prevents overflow clipping */
 }
 
 #page-img { 
@@ -96,7 +94,6 @@ body {
     max-height: none !important; 
     display: block; 
     box-shadow: 0 0 20px rgba(0,0,0,0.8);
-    transition: height 0.15s ease-out; 
 }
 
 /* --- SPATIAL MAPPING (CYAN BOXES) --- */

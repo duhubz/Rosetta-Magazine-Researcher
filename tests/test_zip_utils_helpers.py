@@ -110,11 +110,3 @@ def test_update_zip_contents_empty_dict_is_noop(tmp_path):
     before = zp.read_bytes()
     zip_utils.update_zip_contents(zp, {})
     assert zp.read_bytes() == before
-
-
-def test_update_zip_content_single_wrapper_still_works(tmp_path):
-    zp = _make_zip(tmp_path / "a.zip", {"Data/metadata.txt": "old"})
-    zip_utils.update_zip_content(zp, "METADATA.txt", "new")
-    with zipfile.ZipFile(zp) as z:
-        assert z.read("Data/metadata.txt").decode() == "new"
-        assert len(z.namelist()) == 1

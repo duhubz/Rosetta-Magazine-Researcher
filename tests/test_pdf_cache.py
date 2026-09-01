@@ -4,7 +4,7 @@ explicit eviction and close_all."""
 import threading
 import time
 
-import fitz
+import pymupdf
 import pytest
 
 import app.config as cfg
@@ -15,7 +15,7 @@ from app.services import pdf_cache
 def pdf_factory(tmp_path):
     def make(name="doc.pdf", pages=1):
         path = tmp_path / name
-        doc = fitz.open()
+        doc = pymupdf.open()
         for _ in range(pages):
             doc.new_page()
         doc.save(str(path))
