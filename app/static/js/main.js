@@ -831,6 +831,7 @@ async function executeSearch() {
         div.appendChild(btn);
         container.appendChild(div);
     });
+    setRovingTabStops(document.getElementById('search-results'), '.result-item-main');
 }
 
 function triggerSearchHighlight(termsArray) {
@@ -1076,6 +1077,67 @@ function compareVersions(a, b) {
 
 function filterLibrary() { renderLibrary(); }
 
+// ==========================================
+// --- ROVING TABINDEX (keyboard-navigable lists/grids) ---
+// ==========================================
+// One Tab stop per container; arrow keys move between items.
+// Containers persist across re-renders, so listeners attach once and
+// renders just call setRovingTabStops() afterward.
+
+function setRovingTabStops(container, selector) {
+    const items = Array.from(container.querySelectorAll(selector));
+    items.forEach((el, i) => { el.tabIndex = i === 0 ? 0 : -1; });
+}
+
+function gridColumnCount(container) {
+    const cols = getComputedStyle(container).gridTemplateColumns;
+    return cols && cols !== 'none' ? cols.split(' ').length : 1;
+}
+
+function initRovingContainer(containerId, selector, { grid = false } = {}) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // Clicking/focusing an item makes it the container's Tab stop.
+    container.addEventListener('focusin', (e) => {
+        const item = e.target.closest(selector);
+        if (!item || !container.contains(item)) return;
+        container.querySelectorAll(selector).forEach(el => { el.tabIndex = el === item ? 0 : -1; });
+    });
+
+    container.addEventListener('keydown', (e) => {
+        const item = e.target.closest(selector);
+        if (!item) return;
+        const items = Array.from(container.querySelectorAll(selector));
+        const idx = items.indexOf(item);
+        if (idx === -1) return;
+
+        let next = null;
+        const cols = grid ? gridColumnCount(container) : 1;
+        switch (e.key) {
+            case 'ArrowRight': next = idx + 1; break;
+            case 'ArrowLeft': next = idx - 1; break;
+            case 'ArrowDown': next = grid ? idx + cols : idx + 1; break;
+            case 'ArrowUp': next = grid ? idx - cols : idx - 1; break;
+            case 'Home': next = 0; break;
+            case 'End': next = items.length - 1; break;
+            case 'Enter':
+            case ' ':
+                // Activate non-native buttons (role="button" divs).
+                if (item.tagName !== 'BUTTON') { e.preventDefault(); item.click(); }
+                return;
+            default: return;
+        }
+        // Handled key: don't let it bubble to the global shortcuts listener
+        // (ArrowLeft/Right would otherwise also flip the magazine page when
+        // roving inside the sidebar search results).
+        e.preventDefault();
+        e.stopPropagation();
+        if (next === null || next < 0 || next >= items.length) return;
+        items[next].focus(); // focusin handler updates the tab stops
+    });
+}
+
 function renderLibrary() {
     const grid = document.getElementById('lib-grid');
     const magListContainer = document.getElementById('lib-mag-list');
@@ -1114,6 +1176,7 @@ function renderLibrary() {
             };
             magListContainer.appendChild(pill);
         });
+        setRovingTabStops(magListContainer, '.mag-list-item');
         return; 
     }
 
@@ -1197,6 +1260,7 @@ function renderLibrary() {
 
         const card = document.createElement('div');
         card.className = 'lib-card';
+        card.setAttribute('role', 'button');
         card.onclick = () => openModal(item.id, isDownloaded, isTextOnly);
         card.innerHTML = `
             ${badgeHtml}
@@ -1208,6 +1272,7 @@ function renderLibrary() {
         `;
         grid.appendChild(card);
     });
+    setRovingTabStops(grid, '.lib-card');
     document.getElementById('lib-update-all-btn').style.display = itemsWithUpdates.length > 0 ? 'block' : 'none';
 }
 
@@ -1668,6 +1733,14 @@ function attachTextHoverMagic() {
         if (mappedElements.length === 0) return;
 
         boxes.forEach(box => {
+            box.tabIndex = 0;
+            box.setAttribute('role', 'button');
+            box.setAttribute('aria-label', 'Text region — show matching transcription');
+            box.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); box.click(); }
+            });
+            box.addEventListener('focus', () => toggleBoxHighlight(logicalIdx, true));
+            box.addEventListener('blur', () => toggleBoxHighlight(logicalIdx, false));
             box.addEventListener('mouseenter', () => {
                 toggleBoxHighlight(logicalIdx, true);
                 mappedElements.forEach(elIdx => {
@@ -2332,6 +2405,9 @@ function showAIDisclaimer() {
 // ==========================================
 // --- RUN AT STARTUP ---
 // ==========================================
+initRovingContainer('lib-grid', '.lib-card', { grid: true });
+initRovingContainer('lib-mag-list', '.mag-list-item');
+initRovingContainer('search-results', '.result-item-main');
 initToolbarDragAndDrop();
 init(true);
 showAIDisclaimer();
