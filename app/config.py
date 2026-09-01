@@ -34,6 +34,7 @@ DEFAULT_ALLOWED_FETCH_HOSTS = [
     "mega.io",
     "mega.co.nz",
     "*.mega.co.nz",
+    "api.github.com",
 ]
 
 
@@ -73,6 +74,8 @@ def _default_config() -> dict[str, Any]:
         "security": {
             "allowed_fetch_hosts": list(DEFAULT_ALLOWED_FETCH_HOSTS),
             "allow_downloads_from_any_host": False,
+            "update_check_enabled": True,
+            "update_check_url": "https://api.github.com/repos/duhubz/Rosetta-Magazine-Researcher/releases/latest",
             "max_redirects": 5,
         },
     }
@@ -188,6 +191,23 @@ def allow_downloads_from_any_host() -> bool:
     http/https are always rejected regardless of this flag.
     """
     return bool(get_config().get("security", {}).get("allow_downloads_from_any_host", False))
+
+
+def update_check_enabled() -> bool:
+    """Return whether the startup update check is enabled."""
+    return bool(get_config().get("security", {}).get("update_check_enabled", True))
+
+
+def update_check_url() -> str:
+    """Return the URL used for checking the latest release."""
+    return str(
+        get_config()
+        .get("security", {})
+        .get(
+            "update_check_url",
+            "https://api.github.com/repos/duhubz/Rosetta-Magazine-Researcher/releases/latest",
+        )
+    )
 
 
 def max_redirects() -> int:

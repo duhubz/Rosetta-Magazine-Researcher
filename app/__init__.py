@@ -16,7 +16,7 @@ from werkzeug.serving import is_running_from_reloader
 
 from app import config as cfg
 from app.routes import api, api_write, pages
-from app.services import state
+from app.services import state, update_check
 
 # --- Global Logging Configuration ---
 # MAC FIX: When running as a .app bundle, sys.stdout might be None.
@@ -125,6 +125,7 @@ def run_app() -> None:
         if not dev_mode:
             logger.info("Heartbeat monitor active.")
             state.start_heartbeat_monitor()
+            update_check.start_update_check_thread()
 
     if should_open_browser:
         # Give the server a second to warm up before opening browser

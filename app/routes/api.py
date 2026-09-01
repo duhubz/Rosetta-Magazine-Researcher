@@ -14,7 +14,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, request, send_file
 
 import app.config as cfg
-from app.services import catalog, metadata, rendering, search_index, state
+from app.services import catalog, metadata, rendering, search_index, state, update_check
 from app.services import search as search_svc
 from app.services.text_utils import split_sections
 from app.utils import (
@@ -66,6 +66,12 @@ def list_mags() -> Response:
         if not has_hidden_component(p, data_dir)
     ]
     return jsonify({"files": sorted(mags), "metadata": state.METADATA_CACHE})
+
+
+@bp.route("/update-status")
+def update_status() -> Response:
+    """Returns the cached result of the startup update check."""
+    return jsonify(update_check.get_update_status())
 
 
 @bp.route("/render")

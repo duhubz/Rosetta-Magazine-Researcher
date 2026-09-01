@@ -50,6 +50,7 @@ security:
     - mega.io
     - mega.co.nz
     - "*.mega.co.nz"
+    - api.github.com  # GitHub release update checks
   # Advanced / trusted-catalog-only: when true, magazine/data-ZIP downloads
   # (pdf_sources / zip_sources) may fetch from ANY http/https host, skipping
   # the allowlist above. Non-http(s) schemes (file:, javascript:, ...) are
@@ -57,3 +58,5 @@ security:
   # network-restricted environments; leave false unless you fully trust
   # every catalog you have installed.
   allow_downloads_from_any_host: false
+  update_check_enabled: true  # Check for new releases at startup
+  update_check_url: https://api.github.com/repos/duhubz/Rosetta-Magazine-Researcher/releases/latest  # GitHub latest release API

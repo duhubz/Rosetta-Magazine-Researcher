@@ -2145,6 +2145,57 @@ window.addEventListener('pagehide', () => {
     if (navigator.sendBeacon) navigator.sendBeacon('/api/ping');
 });
 
+async function checkForUpdateBanner() {
+    try {
+        const response = await fetch('/api/update-status');
+        if (!response.ok) throw new Error(`update status ${response.status}`);
+        const data = await response.json();
+        if (!data.update_available) return;
+        if (localStorage.getItem('updateSkipVersion') === data.latest_version) return;
+        const remindAfter = parseInt(localStorage.getItem('updateRemindAfter') || '0');
+        if (Date.now() < remindAfter) return;
+        showUpdateBanner(data);
+    } catch (err) {
+        console.debug('Could not check for updates:', err);
+    }
+}
+
+function showUpdateBanner(data) {
+    if (document.getElementById('update-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99998; background:#163b63; color:#fff; text-align:center; padding:10px 16px; font-family:sans-serif;';
+
+    const message = document.createElement('span');
+    message.textContent = `Update available: ${data.latest_version} (you have ${data.current_version})`;
+    banner.appendChild(message);
+
+    const download = document.createElement('button');
+    download.textContent = 'Download';
+    download.style.marginLeft = '16px';
+    download.addEventListener('click', () => window.open(data.download_url, '_blank', 'noopener'));
+    banner.appendChild(download);
+
+    const remind = document.createElement('button');
+    remind.textContent = 'Remind me later';
+    remind.style.marginLeft = '8px';
+    remind.addEventListener('click', () => {
+        localStorage.setItem('updateRemindAfter', String(Date.now() + 24 * 60 * 60 * 1000));
+        banner.remove();
+    });
+    banner.appendChild(remind);
+
+    const skip = document.createElement('button');
+    skip.textContent = 'Skip this version';
+    skip.style.marginLeft = '8px';
+    skip.addEventListener('click', () => {
+        localStorage.setItem('updateSkipVersion', data.latest_version);
+        banner.remove();
+    });
+    banner.appendChild(skip);
+    document.body.prepend(banner);
+}
+
 let disclaimerDisplayed = false;
 function showAIDisclaimer() {
     if (localStorage.getItem('seenAIDisclaimer') || disclaimerDisplayed) return;
@@ -2165,3 +2216,4 @@ function showAIDisclaimer() {
 initToolbarDragAndDrop();
 init(true);
 showAIDisclaimer();
+setTimeout(checkForUpdateBanner, 3000);
