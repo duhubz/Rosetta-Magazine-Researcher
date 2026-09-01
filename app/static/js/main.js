@@ -33,6 +33,27 @@ let pathToLabel = {};
 let itemsWithUpdates =[];
 let completedDownloads = new Set();
 
+img.onerror = () => {
+    if (!img.getAttribute('src')) return;
+    let fallback = document.getElementById('img-fallback');
+    if (!fallback) {
+        fallback = document.createElement('div');
+        fallback.id = 'img-fallback';
+        fallback.style.cssText = 'display:none; margin:auto; padding:60px 30px; text-align:center; color:var(--text); opacity:0.7; font-size:15px; max-width:420px;';
+        container.appendChild(fallback);
+    }
+    fallback.textContent = metadataCache[magSelect.value]?.text_only === 'true'
+        ? '📄 Text-only install — no page images. Use "Get Full Version" in the Library to download the PDF.'
+        : '⚠️ Failed to load page image.';
+    img.style.display = 'none';
+    fallback.style.display = 'block';
+};
+img.onload = () => {
+    img.style.display = '';
+    const fallback = document.getElementById('img-fallback');
+    if (fallback) fallback.style.display = 'none';
+};
+
 // Editor State
 let currentModalItemId = null;
 let contentEditor = null;
@@ -1032,6 +1053,8 @@ function renderLibrary() {
         // Exact basename match — endsWith would let 'game.pdf' match 'Endgame.pdf'
         const localRelPath = localFiles.find(f => f.split('/').pop() === item.pdf_filename);
         const isDownloaded = !!localRelPath;
+        const localMeta = metadataCache[localRelPath] || {};
+        const isTextOnly = isDownloaded && localMeta.text_only === 'true';
         
         let updateAvailable = false;
         if (isDownloaded) {
@@ -1077,7 +1100,7 @@ function renderLibrary() {
 
         let badgeHtml = "";
         if (updateAvailable) badgeHtml = `<div class="badge" style="background:#ff9800; color:#000;">🔄 Update Available</div>`;
-        else if (isDownloaded) badgeHtml = `<div class="badge badge-installed">✅ Installed</div>`;
+        else if (isDownloaded) badgeHtml = `<div class="badge badge-installed">${isTextOnly ? '📄 Text Only' : '✅ Installed'}</div>`;
         else badgeHtml = `<div class="badge badge-cloud">☁️ Cloud</div>`;
         
         let origFlag = getFlagEmoji(item.original_language);
@@ -1090,7 +1113,7 @@ function renderLibrary() {
 
         const card = document.createElement('div');
         card.className = 'lib-card';
-        card.onclick = () => openModal(item.id, isDownloaded);
+        card.onclick = () => openModal(item.id, isDownloaded, isTextOnly);
         card.innerHTML = `
             ${badgeHtml}
             <img class="lib-cover" src="${escapeHtml(coverImg)}" loading="lazy">
@@ -1104,7 +1127,7 @@ function renderLibrary() {
     document.getElementById('lib-update-all-btn').style.display = itemsWithUpdates.length > 0 ? 'block' : 'none';
 }
 
-function openModal(id, isDownloaded) {
+function openModal(id, isDownloaded, isTextOnly) {
     currentModalItemId = id; 
     const item = catalogData.find(i => i.id === id);
     if(!item) return;
@@ -1170,7 +1193,13 @@ function openModal(id, isDownloaded) {
             `;
             bindActionButtons(actionArea);
         } else if (isDownloaded) {
-            actionArea.innerHTML = `
+            actionArea.innerHTML = isTextOnly ? `
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-read" style="flex:1;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Read Now</button>
+                    <button class="btn-dl" style="flex:1;" data-action="download" data-id="${escapeHtml(item.id)}">⬇️ Get Full Version</button>
+                    <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" data-action="uninstall" data-pdf="${escapeHtml(item.pdf_filename || '')}">🗑️ Uninstall</button>
+                </div>
+            ` : `
                 <div style="display:flex; gap:10px;">
                     <button class="btn-read" style="flex:1;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Read Now</button>
                     <button class="btn-dl" style="background:#dc3545; flex:none; width:auto; padding:10px 15px;" data-action="uninstall" data-pdf="${escapeHtml(item.pdf_filename || '')}">🗑️ Uninstall</button>
@@ -1178,7 +1207,7 @@ function openModal(id, isDownloaded) {
             `;
             bindActionButtons(actionArea);
         } else {
-            actionArea.innerHTML = `<button class="btn-dl" data-action="download" data-id="${escapeHtml(item.id)}">☁️ Download to Library</button>`;
+            actionArea.innerHTML = `<div style="display:flex; gap:10px;"><button class="btn-dl" style="flex:1;" data-action="download" data-id="${escapeHtml(item.id)}">☁️ Download to Library</button><button class="btn-dl" style="flex:1;" data-action="download-text" data-id="${escapeHtml(item.id)}">📄 Text Only</button></div>`;
             bindActionButtons(actionArea);
         }
         document.getElementById('modal-overlay').style.display = 'flex';
@@ -1195,6 +1224,7 @@ function bindActionButtons(container) {
             const action = btn.dataset.action;
             if (action === 'read') readIssue(btn.dataset.pdf);
             else if (action === 'download') startDownload(btn.dataset.id, btn.parentElement);
+            else if (action === 'download-text') startDownload(btn.dataset.id, btn.parentElement, 'text');
             else if (action === 'uninstall') uninstallIssue(btn.dataset.pdf);
         });
     });
@@ -1278,7 +1308,7 @@ async function updateAllIssues() {
     });
 }
 
-async function startDownload(id, actionAreaElement) {
+async function startDownload(id, actionAreaElement, mode = 'full') {
     completedDownloads.delete(id); 
     actionAreaElement.innerHTML = `
         <div style="font-size:12px; color:var(--accent); margin-bottom:5px;" id="dl-stat-mod">Connecting to Archive...</div>
@@ -1289,7 +1319,7 @@ async function startDownload(id, actionAreaElement) {
     `;
     await fetch(`/api/download`, {
         method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
-        body: JSON.stringify({id: id})
+        body: JSON.stringify({id: id, mode: mode})
     });
     renderLibrary(); 
 }

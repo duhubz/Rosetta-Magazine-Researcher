@@ -226,6 +226,8 @@ Best for translation groups or creators who continuously release updates.
 
 The PDFs and ZIPs are downloaded from the URLs in `pdf_sources` and `zip_sources` (defined in the catalog by the publisher). If either are empty or missing, the app skips them. The app tries each URL in order until one succeeds, so catalog authors can list backup mirrors.
 
+**Text-only downloads:** The app offers a per-magazine `Text Only` download that fetches only the `zip_sources`/`zip_filename` data ZIP; no new catalog fields are needed. A text-only install is the data ZIP without its PDF, and the app writes a `Pdf Filename:` line into the ZIP's `metadata.txt` to key the install. Downloading the full version later upgrades it in place.
+
 Public Mega file links are also supported in `pdf_sources` and `zip_sources`:
 
 ~~~json
