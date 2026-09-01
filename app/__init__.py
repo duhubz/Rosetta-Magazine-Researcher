@@ -42,7 +42,7 @@ def create_app() -> Flask:
 
     # Verify UI folders exist
     # If these are missing, the app will show a blank screen or 404 errors.
-    template_dir = Path(app.template_folder)
+    template_dir = Path(app.root_path) / app.template_folder
     static_dir = Path(app.static_folder)
 
     if not template_dir.exists() or not static_dir.exists():

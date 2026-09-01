@@ -1,12 +1,12 @@
 """
 PDF Document Cache
-Thread-safe LRU of open fitz (PyMuPDF) Document handles, so page turns don't
+Thread-safe LRU of open pymupdf Document handles, so page turns don't
 reopen the same PDF from disk on every /api/render and /api/text request.
 
 Design:
 - An OrderedDict maps resolved path -> (Document, per-document Lock),
   guarded by a module-level lock for cache bookkeeping.
-- fitz Documents are NOT safe for concurrent access to the same document,
+- pymupdf Documents are NOT safe for concurrent access to the same document,
   so get_doc() is a context manager that holds the document's own lock for
   the duration of the `with` block.
 - Evicted/removed documents are closed under their per-document lock so a
@@ -20,14 +20,14 @@ import threading
 from collections.abc import Iterator
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf
 
 import app.config as cfg
 
 logger = logging.getLogger(__name__)
 
 _CACHE_LOCK = threading.Lock()
-_CACHE: "collections.OrderedDict[str, tuple[fitz.Document, threading.Lock]]" = (
+_CACHE: "collections.OrderedDict[str, tuple[pymupdf.Document, threading.Lock]]" = (
     collections.OrderedDict()
 )
 
@@ -36,7 +36,7 @@ def _max_size() -> int:
     return max(1, cfg.pdf_cache_max_open_documents())
 
 
-def _close_entry(doc: fitz.Document, doc_lock: threading.Lock) -> None:
+def _close_entry(doc: pymupdf.Document, doc_lock: threading.Lock) -> None:
     """Closes a document after acquiring its per-document lock."""
     with doc_lock:
         try:
@@ -47,23 +47,23 @@ def _close_entry(doc: fitz.Document, doc_lock: threading.Lock) -> None:
 
 
 @contextlib.contextmanager
-def get_doc(pdf_path: Path) -> Iterator[fitz.Document]:
+def get_doc(pdf_path: Path) -> Iterator[pymupdf.Document]:
     """
-    Yields an open fitz.Document for `pdf_path`, held under its per-document
+    Yields an open pymupdf.Document for `pdf_path`, held under its per-document
     lock for the duration of the `with` block.
 
     Opens and caches the document on miss, evicting least-recently-used
-    entries beyond the configured capacity. If fitz.open fails the exception
+    entries beyond the configured capacity. If pymupdf.open fails the exception
     propagates to the caller (matching the previous direct-open behavior).
     """
     key = str(Path(pdf_path).resolve())
 
     while True:
-        evicted: list[tuple[fitz.Document, threading.Lock]] = []
+        evicted: list[tuple[pymupdf.Document, threading.Lock]] = []
         with _CACHE_LOCK:
             entry = _CACHE.get(key)
             if entry is None or entry[0].is_closed:
-                doc = fitz.open(str(pdf_path))
+                doc = pymupdf.open(str(pdf_path))
                 entry = (doc, threading.Lock())
                 _CACHE[key] = entry
             _CACHE.move_to_end(key)

@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from app.services import pdf_cache, zip_utils
 
@@ -34,12 +34,12 @@ def render_page_png(pdf_path: Path, page_number: int, zoom: float) -> bytes:
     Renders one PDF page to PNG bytes at the given (pre-clamped) zoom.
 
     Uses the shared document cache; the per-document lock is held for the
-    duration of the render (fitz Documents are not thread-safe). Exceptions
+    duration of the render (pymupdf Documents are not thread-safe). Exceptions
     (bad page number, corrupt PDF) propagate to the caller.
     """
     with pdf_cache.get_doc(pdf_path) as doc:
         page = doc.load_page(page_number)
-        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
         return pix.tobytes("png")
 
 

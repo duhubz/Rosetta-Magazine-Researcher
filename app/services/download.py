@@ -304,7 +304,7 @@ def _download_worker_impl(task_id: str, item: dict[str, Any]) -> None:
 
     if zip_path.exists():
         try:
-            zip_utils.update_zip_content(zip_path, "metadata.txt", meta_content)
+            zip_utils.update_zip_contents(zip_path, {"metadata.txt": meta_content})
             if loose_meta.exists():
                 os.remove(loose_meta)
         except Exception as e:
