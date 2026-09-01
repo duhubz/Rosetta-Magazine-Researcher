@@ -32,6 +32,15 @@ DOWNLOAD_STATE: dict[str, dict[str, Any]] = {}
 # Timestamp of the last 'ping' received from the browser UI.
 LAST_PING: float = time.time()
 
+# Registry of browser tabs currently showing the app.
+# Key: opaque per-page-load tab id from the frontend; Value: last ping time.
+ACTIVE_TABS: dict[str, float] = {}
+_tabs_lock = threading.Lock()
+
+# Timestamp of the most recent explicit "tab closing" notification (the
+# pagehide beacon), or None if no tab has ever said goodbye.
+LAST_CLOSE: float | None = None
+
 # Set when the idle monitor decides to shut down; long-running work
 # (downloads, extractions) should check this and abort cleanly.
 SHUTDOWN_EVENT = threading.Event()
@@ -67,24 +76,79 @@ def writes_in_progress() -> int:
         return _writes_in_progress
 
 
+def record_ping(tab_id: str | None, closing: bool = False) -> None:
+    """Records a heartbeat from the browser UI.
+
+    Regular pings (re)register the tab and refresh LAST_PING. A `closing`
+    ping (sent via navigator.sendBeacon on pagehide) deregisters the tab
+    instead, which lets the idle monitor exit shortly after the last tab
+    closes rather than waiting out the full idle threshold.
+    """
+    global LAST_PING, LAST_CLOSE
+    now = time.time()
+    if closing:
+        LAST_CLOSE = now
+        if tab_id:
+            with _tabs_lock:
+                ACTIVE_TABS.pop(tab_id, None)
+        return
+    LAST_PING = now
+    if tab_id:
+        with _tabs_lock:
+            ACTIVE_TABS[tab_id] = now
+
+
+def should_shutdown(now: float | None = None) -> bool:
+    """Decides whether the idle-shutdown monitor should exit the process.
+
+    Three rules, checked in order:
+
+    1. While any registered tab has pinged within the idle threshold the
+       server stays up. This includes hidden/background tabs — browsers
+       throttle their timers to roughly once a minute, still comfortably
+       inside the default 180s threshold. Tabs silent for longer than the
+       threshold (browser crash, killed process, lost beacon) are pruned.
+    2. Failsafe: if nothing at all has pinged within the threshold
+       (browser never opened, crashed before goodbye), shut down.
+    3. Quick exit: if every tab said goodbye (pagehide beacon) and no ping
+       has arrived since, shut down after a short grace period. The grace
+       keeps a page refresh alive: its goodbye is followed by an immediate
+       re-register from the reloaded page.
+    """
+    if now is None:
+        now = time.time()
+    threshold = cfg.heartbeat_shutdown_seconds()
+    with _tabs_lock:
+        for tab_id, last in list(ACTIVE_TABS.items()):
+            if now - last > threshold:
+                del ACTIVE_TABS[tab_id]
+        if ACTIVE_TABS:
+            return False
+    if now - LAST_PING > threshold:
+        return True
+    return (
+        LAST_CLOSE is not None
+        and LAST_CLOSE >= LAST_PING
+        and now - LAST_CLOSE > cfg.heartbeat_close_grace_seconds()
+    )
+
+
 def start_heartbeat_monitor() -> None:
     """
-    Starts a background thread that monitors the 'LAST_PING' timestamp.
+    Starts a background thread that monitors browser heartbeats.
 
-    If the browser tab is closed, the UI stops sending pings. After the
-    threshold defined in config (default 180s), this thread signals
+    The server stays alive while any tab is open (see should_shutdown for
+    the exact rules). Once the decision to exit is made, this thread signals
     SHUTDOWN_EVENT, waits briefly for in-progress writes to finish, and
     then exits the process to free up system memory.
     """
     global _heartbeat_thread
 
     def monitor() -> None:
-        shutdown_sec = cfg.heartbeat_shutdown_seconds()
         interval = cfg.heartbeat_check_interval()
         while True:
             time.sleep(interval)
-            # If the gap between now and the last ping exceeds our limit, shut down.
-            if time.time() - LAST_PING > shutdown_sec:
+            if should_shutdown():
                 # Cooperative shutdown: signal workers, then give in-progress
                 # writes a 5-second grace period to complete.
                 SHUTDOWN_EVENT.set()

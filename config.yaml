@@ -30,8 +30,9 @@ pdf_cache:
   max_open_documents: 2  # LRU size for open PDF handles (per-document locking)
 
 heartbeat:
-  shutdown_after_idle_seconds: 28800  # Auto-exit after no browser heartbeat for this long
-  check_interval_seconds: 60
+  shutdown_after_idle_seconds: 180  # Failsafe: exit if nothing has pinged for this long (browser crash)
+  check_interval_seconds: 5
+  close_grace_seconds: 20  # Exit this soon after the last tab closes cleanly
 
 security:
   # Hosts the app is allowed to fetch from (http/https only). This one list

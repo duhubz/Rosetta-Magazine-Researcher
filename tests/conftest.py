@@ -52,11 +52,15 @@ def clean_state():
     state.METADATA_CACHE = {}
     state.DOWNLOAD_STATE.clear()
     state.SHUTDOWN_EVENT.clear()
+    state.ACTIVE_TABS.clear()
+    state.LAST_CLOSE = None
     _reset_caches()
     yield
     state.METADATA_CACHE = {}
     state.DOWNLOAD_STATE.clear()
     state.SHUTDOWN_EVENT.clear()
+    state.ACTIVE_TABS.clear()
+    state.LAST_CLOSE = None
     _reset_caches()
 
 

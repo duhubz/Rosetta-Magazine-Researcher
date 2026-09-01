@@ -8,7 +8,6 @@ api_write.py; both blueprints share the /api URL prefix.
 import io
 import logging
 import re
-import time
 from pathlib import Path
 
 from flask import Blueprint, Response, jsonify, request, send_file
@@ -42,9 +41,11 @@ def ping() -> str:
     """Heartbeat endpoint to keep the server alive while the browser tab is open.
 
     Accepts POST (without the session token) so navigator.sendBeacon can
-    deliver a final heartbeat on pagehide.
+    deliver a final heartbeat on pagehide. Query params: `tab` is an opaque
+    per-page-load id, `closing=1` deregisters that tab (see state.record_ping).
     """
-    state.LAST_PING = time.time()
+    tab_id = request.args.get("tab") or None
+    state.record_ping(tab_id, closing=request.args.get("closing") == "1")
     return "ok"
 
 

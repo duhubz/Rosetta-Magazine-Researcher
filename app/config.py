@@ -63,6 +63,7 @@ def _default_config() -> dict[str, Any]:
         "heartbeat": {
             "shutdown_after_idle_seconds": 180,
             "check_interval_seconds": 5,
+            "close_grace_seconds": 20,
         },
         "search": {
             "index_file": ".rosetta_index.db",
@@ -165,6 +166,10 @@ def heartbeat_shutdown_seconds() -> int:
 
 def heartbeat_check_interval() -> int:
     return int(get_config().get("heartbeat", {}).get("check_interval_seconds", 5))
+
+
+def heartbeat_close_grace_seconds() -> int:
+    return int(get_config().get("heartbeat", {}).get("close_grace_seconds", 20))
 
 
 def search_index_file() -> str:
