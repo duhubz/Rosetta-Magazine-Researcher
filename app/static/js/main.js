@@ -719,6 +719,7 @@ async function executeSearch() {
     const data = await res.json();
     const container = document.getElementById('search-results');
     container.innerHTML = '';
+    document.getElementById('search-status').textContent = data.results.length === 0 ? 'No matches.' : `${data.results.length}${data.results.length >= 200 ? '+' : ''} results found`;
     
     if (data.results.length === 0) {
         container.innerHTML = '<div style="padding:20px; color:#888;">No matches.</div>';
@@ -734,6 +735,9 @@ async function executeSearch() {
 
     data.results.forEach(r => {
         const div = document.createElement('div'); div.className = 'result-item';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'result-item-main';
         let snip;
         if (r.snippet && r.snippet.includes('<mark>')) {
             // Server-side FTS5 snippet: escape everything, then restore only
@@ -754,8 +758,9 @@ async function executeSearch() {
         let resultTitle = meta.name ? meta.name : r.mag.split('/').pop().replace('.pdf', '');
         if (meta.issue_name) resultTitle += ` - ${meta.date} - ${meta.issue_name}`;
 
-        div.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:11px;">${escapeHtml(resultTitle)} — P${escapeHtml(r.page)}</span><br><small>...${snip}...</small>`;
-        div.onclick = () => { magSelect.value = r.mag; update(r.page, data.terms_to_highlight); };
+        btn.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:11px;">${escapeHtml(resultTitle)} — P${escapeHtml(r.page)}</span><br><small>...${snip}...</small>`;
+        btn.onclick = () => { magSelect.value = r.mag; update(r.page, data.terms_to_highlight); };
+        div.appendChild(btn);
         container.appendChild(div);
     });
 }
@@ -864,9 +869,19 @@ function renderBookmarks() {
         if (filter && !tags.toLowerCase().includes(filter) && !prettyName.toLowerCase().includes(filter)) return;
         const div = document.createElement('div');
         div.className = 'result-item';
-        div.innerHTML = `<b>${escapeHtml(prettyName)} - P${escapeHtml(b.page)}</b><br><small style="color:var(--accent)">${escapeHtml(tags)}</small><span class="del-bk">🗑️</span>`;
-        div.onclick = () => { magSelect.value = b.mag; update(b.page); };
-        div.querySelector('.del-bk').addEventListener('click', (e) => deleteBookmark(key, e));
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'result-item-main';
+        btn.innerHTML = `<b>${escapeHtml(prettyName)} - P${escapeHtml(b.page)}</b><br><small style="color:var(--accent)">${escapeHtml(tags)}</small>`;
+        btn.onclick = () => { magSelect.value = b.mag; update(b.page); };
+        div.appendChild(btn);
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'del-bk';
+        delBtn.setAttribute('aria-label', 'Delete bookmark');
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', (e) => deleteBookmark(key, e));
+        div.appendChild(delBtn);
         list.appendChild(div);
     });
 }
@@ -1020,7 +1035,8 @@ function renderLibrary() {
         catalogData.forEach(item => { if (item.magazine_name) uniqueMags.add(item.magazine_name); });
         
         Array.from(uniqueMags).sort().forEach(magName => {
-            const pill = document.createElement('div');
+            const pill = document.createElement('button');
+            pill.type = 'button';
             pill.className = 'mag-list-item';
             pill.innerText = magName;
             pill.onclick = () => {
@@ -1116,7 +1132,7 @@ function renderLibrary() {
         card.onclick = () => openModal(item.id, isDownloaded, isTextOnly);
         card.innerHTML = `
             ${badgeHtml}
-            <img class="lib-cover" src="${escapeHtml(coverImg)}" loading="lazy">
+            <img class="lib-cover" src="${escapeHtml(coverImg)}" alt="" loading="lazy">
             <div class="lib-info">
                 <div class="lib-title"><span style="overflow:hidden; text-overflow:ellipsis;">${escapeHtml(prettyName)}</span> ${langDisplay}</div>
                 <div class="lib-desc">${escapeHtml(issueLabel) || 'Unknown Issue'}</div>
@@ -1178,7 +1194,7 @@ function openModal(id, isDownloaded, isTextOnly) {
         if (state && !state.done && !state.error) {
             actionArea.innerHTML = `
                 <div style="font-size:12px; color:var(--accent); margin-bottom:5px;" id="dl-stat-mod">Downloading...</div>
-                <div class="progress-container">
+                <div class="progress-container" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.progress}">
                     <div class="progress-bar" id="dl-bar-mod" style="width:${state.progress}%"></div>
                     <div class="progress-text" id="dl-txt-mod">${state.progress}%</div>
                 </div>
@@ -1312,11 +1328,13 @@ async function startDownload(id, actionAreaElement, mode = 'full') {
     completedDownloads.delete(id); 
     actionAreaElement.innerHTML = `
         <div style="font-size:12px; color:var(--accent); margin-bottom:5px;" id="dl-stat-mod">Connecting to Archive...</div>
-        <div class="progress-container">
+        <div class="progress-container" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="progress-bar" id="dl-bar-mod"></div>
             <div class="progress-text" id="dl-txt-mod">0%</div>
         </div>
     `;
+    const dlLive = document.getElementById('dl-live');
+    if (dlLive) dlLive.textContent = 'Download started';
     await fetch(`/api/download`, {
         method: 'POST', headers: {'Content-Type': 'application/json', ...TOKEN_HEADERS},
         body: JSON.stringify({id: id, mode: mode})
@@ -1349,18 +1367,26 @@ setInterval(async () => {
             
             if(statEl && barEl) {
                 if (state.error) {
+                    const dlLive = document.getElementById('dl-live');
+                    const errMsg = 'Download error: ' + state.error;
+                    // Only write on change — rewriting identical text every poll
+                    // tick makes screen readers re-announce the error endlessly.
+                    if (dlLive && dlLive.textContent !== errMsg) dlLive.textContent = errMsg;
                     statEl.innerText = "Error: " + state.error;
                     statEl.style.color = "#ff4d4d";
                     barEl.style.background = "#ff4d4d";
                 } else {
                     statEl.innerText = state.status;
                     barEl.style.width = state.progress + "%";
+                    barEl.parentElement.setAttribute('aria-valuenow', state.progress);
                     txtEl.innerText = state.progress + "%";
                     
                     if (state.done && state.progress === 100) {
                         const actionArea = document.getElementById('modal-action-area');
                         const item = catalogData.find(i => i.id === id);
                         if(actionArea && item && actionArea.innerHTML.includes('dl-bar-mod')) {
+                            const dlLive = document.getElementById('dl-live');
+                            if (dlLive) dlLive.textContent = 'Download complete';
                             actionArea.innerHTML = `
                                 <div style="display:flex; gap:10px;">
                                     <button class="btn-read" style="flex:1;" data-action="read" data-pdf="${escapeHtml(item.pdf_filename || '')}">📖 Download Complete - Read Now</button>
@@ -1893,6 +1919,8 @@ function getFlagEmoji(langCode) {
 function showTab(tab) {
     document.getElementById('tab-search').classList.toggle('active', tab === 'search');
     document.getElementById('tab-bookmarks').classList.toggle('active', tab === 'bookmarks');
+    document.getElementById('tab-search').setAttribute('aria-selected', tab === 'search' ? 'true' : 'false');
+    document.getElementById('tab-bookmarks').setAttribute('aria-selected', tab === 'bookmarks' ? 'true' : 'false');
     document.getElementById('panel-search').style.display = tab === 'search' ? 'block' : 'none';
     document.getElementById('panel-bookmarks').style.display = tab === 'bookmarks' ? 'block' : 'none';
 }
@@ -2065,7 +2093,7 @@ function toggleHelp(forceOpen = false) {
 }
 
 function closeHelp(e) {
-    if (e && e.target.id !== 'help-overlay' && e.target.innerText !== '×') return;
+    if (e && e.target.id !== 'help-overlay' && !e.target.classList.contains('close-modal')) return;
     document.getElementById('help-overlay').style.display = 'none';
 }
 
@@ -2145,6 +2173,7 @@ function showServerDownBanner() {
     if (document.getElementById('server-down-banner')) return;
     const banner = document.createElement('div');
     banner.id = 'server-down-banner';
+    banner.setAttribute('role', 'alert');
     banner.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99999; background:#dc3545; color:#fff; text-align:center; padding:10px 16px; font-weight:bold; font-family:sans-serif;';
     banner.textContent = '⚠️ The server has shut down. Please relaunch the app to continue.';
     document.body.prepend(banner);
@@ -2197,6 +2226,7 @@ function showUpdateBanner(data) {
     if (document.getElementById('update-banner')) return;
     const banner = document.createElement('div');
     banner.id = 'update-banner';
+    banner.setAttribute('role', 'status');
     banner.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99998; background:#163b63; color:#fff; text-align:center; padding:10px 16px; font-family:sans-serif;';
 
     const message = document.createElement('span');
