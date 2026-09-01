@@ -2224,6 +2224,8 @@ Use the **Library** to download new issues, or the **Search** tab to find specif
 
 **To safely close the application**, simply close your browser tab! The background server will automatically shut down after about 3 minutes of inactivity to save memory.
 
+**Automatic Update Check:** Once a day, the app checks GitHub for a newer release. If one exists, a banner appears with **Download**, **Remind me later** (snoozes it for 24 hours), and **Skip this version** buttons. You can disable the check entirely by setting \`security.update_check_enabled: false\` in \`config.yaml\`.
+
 ---
 
 ## 🎮 Viewer Controls & Interactive Reading
@@ -2233,11 +2235,13 @@ Rosetta features a fully interactive spatial mapping engine. If an issue include
 - **Reverse Lookup (Click-to-Scroll):** Click any cyan box on the magazine image to automatically scroll the sidebar to the translation. Clicking again toggles between the translation and transcription.
 - **💬 Manga Mode:** Paints over the original transcribed text and injects translations directly onto the page for a professional "scanlation" experience.
 - **👁️ Zones Toggle:** See a "heat map" of exactly where the AI detected text on the page.
-- **Native Zoom & Pan:** Use the **🔍+** and **🔍-** buttons, or hold **Ctrl + Mouse Wheel** to zoom.
+- **Native Zoom & Pan:** Use the **🔍+** and **🔍-** buttons, or hold **Ctrl + Mouse Wheel** to zoom toward your cursor. You can also type an exact percentage (30–500%) into the zoom box in the toolbar and press **Enter**, or press **Ctrl + 0** to reset to 100%. The scan automatically re-renders at higher zoom levels so it stays sharp instead of getting blurry.
+- **⊞ Page Grid:** Click the **⊞** button next to the page arrows to open a thumbnail grid of every page — click any thumbnail to jump straight to that page. Fully keyboard navigable (arrow keys + Enter).
 - **Formatting:** Click the **MD** button to toggle between formatted markdown and raw text.
 - **Font Size & Theme:** Use the slider at the bottom to adjust text size, and the ☀️ button to switch between Dark and Light mode.
 - **Bookmarks:** Click the ⭐ button to save your current page. You can add custom tags to your bookmarks to easily filter them in the Bookmarks sidebar tab!
 - **Customizable Toolbar:** Grab the dotted handle (**⋮⋮**) on any section of the bottom toolbar to drag and reorder the controls to your liking. Your custom layout is saved automatically!
+- **Everything Remembers:** Your theme, font size, zoom level, toolbar layout, and last-read page are all saved automatically — the app reopens right where you left off.
 
 ---
 
@@ -2246,6 +2250,7 @@ Rosetta features a fully interactive spatial mapping engine. If an issue include
 - **Filter by Section:** Use the checkboxes in the sidebar to search *only* the summaries or *only* the translations.
 - **Spatial Highlights:** When you click a search result, the app auto-scrolls the PDF to the exact location of the word and flashes a **red box** over the text.
 - **Library Management:** You can **Uninstall** downloaded issues to save hard drive space, or use the **🔄 Update All** button to batch download updates for all your installed magazines at once.
+- **📄 Text Only Downloads:** Save disk space by downloading just the transcriptions & translations without the large PDF scan. Text-only issues show a **📄 Text Only** badge in your library, and the reader shows the text side without page images. Click **⬇️ Get Full Version** later to add the scanned pages in place — no reinstall needed.
 - **Adult Content:** In the library, magazines tagged as 18+/NSFW are hidden by default. Check the "18+ Content" box to include mature content in your library view.
 
 ### Advanced Date Searching
@@ -2271,6 +2276,9 @@ The Search tab has a very smart date filter. You don't need exact days!
 | Dialogs | \`Escape\` | Close the top dialog |
 | Dialogs | \`Tab / Shift+Tab\` | Cycle focus inside the dialog |
 | General | \`?\` | Open this help window |
+
+### ♿ Accessibility
+The entire app can be driven from the keyboard: the library grid, search results, and page-thumbnail grid all support arrow-key navigation, every dialog traps focus and closes with **Escape**, and screen readers receive live announcements for search results and download progress.
 
 ---
 
@@ -2311,7 +2319,7 @@ Notes: Missing pages 12-14.
 ### 🎨 Spatial Box Manipulation
 Transcriptions/Translations downloaded from the Library often come with a coordinates JSON file that maps the exact location of each line of text on the original magazine scan. If you find any misalignments, you can edit these boxes directly in the app!
 
-- **Resize/Move:**Click a box to select it, then drag the edges to resize or move it.
+- **Resize/Move:** Click a box to select it, then drag the edges to resize or move it.
 - **Split Box:** Creates a new box directly below the current one. This is useful when a text string or block is spread across multiple areas on the page. Simply draw the new box over the next area of text and both boxes will highlight when clicked or hovered over in the viewer.
 - **Delete Box:** Click an existing box and then click the delete button.
 - **Add Box:** Click the Add New Box button and copy/paste the proper transcription text into it in order to link it.

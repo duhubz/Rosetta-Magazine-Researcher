@@ -24,6 +24,16 @@ Download the latest version for Windows, Mac, or Linux from our **[Releases Page
 **Note for Mac Users** - Because this app is not signed by an Apple Developer account, macOS may prevent it from opening. If you see an error saying the app is 'damaged' or 'from an unidentified developer,' open Terminal and run:
 xattr -cr /path/to/Rosetta_Magazine_Researcher.app
 
+### 🐍 Running from Source
+Prefer to run the app with your own Python (3.11+)? Clone or download this repository, then from the project folder:
+
+```text
+pip install -r requirements.txt
+python app.py
+```
+
+The app starts a local web server and opens in your browser. Re-run `pip install -r requirements.txt` after updating to a new version — dependencies change occasionally.
+
 ---
 
 ## Notice on AI Translations
@@ -38,6 +48,8 @@ Use the **Library** button to download new issues from the cloud, or the **Searc
 
 **To safely close the application**, simply close your browser tab! The background server will automatically shut down after about 3 minutes of inactivity to save memory.
 
+**Automatic Update Check:** Once a day, the app checks GitHub for a newer release. If one exists, a banner appears with **Download**, **Remind me later** (snoozes it for 24 hours), and **Skip this version** buttons. You can disable the check entirely by setting `security.update_check_enabled: false` in `config.yaml`.
+
 ---
 
 ## 🎮 Viewer Controls & Interactive Reading
@@ -47,11 +59,13 @@ Rosetta features a **spatial mapping engine**. If an issue includes a coordinate
 *   **Reverse Lookup (Click-to-Scroll):** Click any cyan box on the magazine image to automatically scroll the sidebar to that translation. Clicking again toggles between translation and transcription.
 *   **💬 Manga Mode:** Paints over the original transcribed text and injects translations directly onto the page for a professional "scanlation" experience.
 *   **👁️ Zones Toggle:** See a "heat map" of exactly where the AI detected text on the page.
-*   **Native Zoom & Pan:** Use the **🔍+** and **🔍-** buttons, or hold **Ctrl + Mouse Wheel** to zoom. **Ctrl + 0** resets zoom to 100%.
+*   **Native Zoom & Pan:** Use the **🔍+** and **🔍-** buttons, or hold **Ctrl + Mouse Wheel** to zoom toward your cursor. You can also type an exact percentage (30–500%) into the zoom box in the toolbar and press **Enter**, or press **Ctrl + 0** to reset to 100%. The scan automatically re-renders at higher zoom levels so it stays sharp instead of getting blurry.
+*   **⊞ Page Grid:** Click the **⊞** button next to the page arrows to open a thumbnail grid of every page — click any thumbnail to jump straight to that page. Fully keyboard navigable (arrow keys + Enter).
 *   **Formatting:** Click the **MD** button to toggle between formatted markdown and raw text.
 *   **Font Size & Theme:** Use the slider at the bottom to adjust text size, and the ☀️ button to switch between Dark and Light mode.
 *   **Bookmarks:** Click the ⭐ button to save your current page. You can add custom tags to your bookmarks to easily filter them in the Bookmarks sidebar tab!
 *   **Customizable Toolbar:** Grab the dotted handle (**⋮⋮**) on any section of the bottom toolbar to drag and reorder the controls to your liking. Your custom layout is saved automatically!
+*   **Everything Remembers:** Your theme, font size, zoom level, toolbar layout, and last-read page are all saved automatically — the app reopens right where you left off.
 ---
 
 ## 🔍 Search & Library Tips
@@ -59,6 +73,7 @@ Rosetta features a **spatial mapping engine**. If an issue includes a coordinate
 *   **Filter by Section:** Use the checkboxes in the sidebar to search *only* summaries or *only* translations.
 *   **Spatial Highlights:** When you click a search result, the app auto-scrolls the PDF to the exact location of the word and flashes a **red box** over the text.
 *   **Library Management:** You can **Uninstall** downloaded issues to save hard drive space, or use the **🔄 Update All** button to batch download updates for all your installed magazines at once.
+*   **📄 Text Only Downloads:** Save disk space by downloading just the transcriptions & translations without the large PDF scan. Text-only issues show a **📄 Text Only** badge in your library, and the reader shows the text side without page images. Click **⬇️ Get Full Version** later to add the scanned pages in place — no reinstall needed.
 *   **Adult Content:** In the library, magazines tagged as 18+/NSFW are hidden by default. Check the "18+ Content" box in the library to view them.
 
 ### Advanced Date Searching
@@ -70,11 +85,23 @@ Search using years, months, or specific days:
 ---
 
 ### ⌨️ Keyboard Shortcuts
-- **Left / Right Arrows:** Previous / Next Page.
-- **Page Up / Down:** Scroll the translation/transcription boxes.
-- **Ctrl + (Plus/Minus):** Zoom In / Out.
-- **Ctrl + 0:** Reset zoom to 100%.
-- **Escape:** Close any open editor or modal window.
+| Group | Shortcut | Action |
+| --- | --- | --- |
+| Reading | `← / →` | Previous / next page |
+| Reading | `Page Up / Page Down` | Scroll the text panel |
+| Reading | `Ctrl/Cmd + + / -` | Zoom the scan in / out |
+| Reading | `Ctrl/Cmd + 0` | Reset zoom to 100% |
+| Reading | `Ctrl/Cmd + Mouse Wheel` | Zoom toward the cursor |
+| Reading | `Enter / Space` (on a highlighted zone) | Jump to that zone's text |
+| Lists & grids | `← → ↑ ↓` | Move between items |
+| Lists & grids | `Home / End` | First / last item |
+| Lists & grids | `Enter / Space` | Open the selected item |
+| Dialogs | `Escape` | Close the top dialog |
+| Dialogs | `Tab / Shift+Tab` | Cycle focus inside the dialog |
+| General | `?` | Open the in-app help window |
+
+### ♿ Accessibility
+The entire app can be driven from the keyboard: the library grid, search results, and page-thumbnail grid all support arrow-key navigation, every dialog traps focus and closes with **Escape**, and screen readers receive live announcements for search results and download progress.
 
 ---
 
@@ -92,7 +119,7 @@ Click the **✏️ Edit** button in the toolbar to begin improving a page. If yo
 Metadata applies to the *entire* magazine. It's main use case is to improve searchability as things in it such as publisher, date, and subject tags are used by the search engine. The file is optional, if it doesn't exist, the app will simply use the magazine's folder name as its title and leave all other metadata fields blank.
 
 Schema (metadata.txt)
-This file sits on your local hard drive next to the PDF (or inside its \`.zip\`). All the fields are optional.
+This file sits on your local hard drive next to the PDF (or inside its `.zip`). All the fields are optional.
 
 Magazine Name: Game Magazine
 Publisher: Nintendo
@@ -113,7 +140,7 @@ Notes: Missing pages 12-14.
 ### 🎨 Spatial Box Manipulation
 Transcriptions/Translations downloaded from the Library often come with a coordinates JSON file that maps the exact location of each line of text on the original magazine scan. If you find any misalignments, you can edit these boxes directly in the app!
 
-- **Resize/Move:**Click a box to select it, then drag the edges to resize or move it.
+- **Resize/Move:** Click a box to select it, then drag the edges to resize or move it.
 - **Split Box:** Creates a new box directly below the current one. This is useful when a text string or block is spread across multiple areas on the page. Simply draw the new box over the next area of text and both boxes will highlight when clicked or hovered over in the viewer.
 - **Delete Box:** Click an existing box and then click the delete button.
 - **Add Box:** Click the Add New Box button and copy/paste the proper transcription text into it in order to link it.
@@ -122,7 +149,7 @@ Transcriptions/Translations downloaded from the Library often come with a coordi
 
 ## 📁 Adding Local Magazines
 You do not have to use the Cloud Library! You can easily add your own personal PDFs to the viewer.
-The app reads magazines from its **\`Magazines\`** subfolder.
+The app reads magazines from its **`Magazines`** subfolder.
 
 1. Open the **`Magazines`** subfolder located in the application folder.
 2. Create a new folder for your magazine (e.g., `My Custom Mag`).
