@@ -497,3 +497,11 @@ body.light-mode .editor-modal-content .toastui-editor-defaultUI:not(.toastui-edi
     /* Hide the little grey dividers on tiny screens so they don't look weird when stacked */
     .controls .divider { display: none; }
 }
+
+/* --- KEYBOARD FOCUS VISIBILITY --- */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Beat the outline:none on the base input/select rule below */
+select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Spatial boxes are invisible until hovered — make keyboard focus reveal them */
+.spatial-box:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
+.lib-card:focus-visible { border-color: var(--accent); }
