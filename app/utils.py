@@ -7,12 +7,13 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import app.config as cfg
+from app.version import __version__
 
 logger = logging.getLogger(__name__)
 
 # User-Agent sent on every outbound request made through safe_urlopen
 # (callers may override it via the `headers` argument).
-USER_AGENT = "Rosetta-Magazine-Researcher/1.0"
+USER_AGENT = f"Rosetta-Magazine-Researcher/{__version__}"
 
 _REDIRECT_CODES = (301, 302, 303, 307, 308)
 
