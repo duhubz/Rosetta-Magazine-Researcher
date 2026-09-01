@@ -96,6 +96,35 @@ def render_page() -> Response:
         return jsonify({"error": str(e)}), 500
 
 
+@bp.route("/thumb")
+def thumbnail_page() -> Response:
+    """Returns a cached low-resolution thumbnail for a specific PDF page."""
+    mag = request.args.get("mag", "")
+    try:
+        pn = int(request.args.get("page", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Bad request", "detail": "'page' must be an integer."}), 400
+
+    if not mag or pn < 0:
+        return jsonify({"error": "Invalid magazine or page parameters"}), 400
+
+    try:
+        pdf_path = get_safe_path(mag)
+    except ValueError as e:
+        return jsonify({"error": "Bad request", "detail": str(e)}), 400
+    if not Path(pdf_path).exists():
+        return jsonify(
+            {"error": "no_pdf", "detail": "No PDF installed for this magazine (text-only install)."}
+        ), 404
+
+    try:
+        img = rendering.get_thumbnail_png(pdf_path, mag, pn)
+        return send_file(io.BytesIO(img), mimetype="image/png")
+    except Exception as e:
+        logger.error(f"Thumbnail render failed for {mag} page {pn}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @bp.route("/text")
 def get_text() -> Response:
     """Retrieves all text sections and spatial coordinates for a specific page."""

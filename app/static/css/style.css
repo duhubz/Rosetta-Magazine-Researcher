@@ -409,6 +409,12 @@ select, input[type=number], input[type=text] {
 .confirm-modal-content { width: min(500px, calc(100vw - 32px)); max-width: calc(100vw - 32px); flex-direction: column; }
 .confirm-modal-body { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 12px; }
 .confirm-modal-message { font-size: 14px; line-height: 1.6; color: #d1d5db; white-space: pre-wrap; }
+.thumb-modal { width: min(900px, 90vw); max-height: 85vh; display: flex; flex-direction: column; padding: 24px; }
+#thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; overflow-y: auto; padding: 4px; }
+.thumb-tile { background: var(--panel); border: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; flex-direction: column; padding: 4px; font-family: inherit; }
+.thumb-tile img { width: 100%; height: auto; display: block; }
+.thumb-tile.current { border-color: var(--accent); }
+.thumb-num { padding: 6px 2px 2px; text-align: center; }
 
 .editor-modal-header, .editor-modal-footer { padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .editor-modal-header { background: #111; border-bottom: 1px solid var(--border); padding-right: 56px; }
@@ -505,3 +511,4 @@ select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 /* Spatial boxes are invisible until hovered — make keyboard focus reveal them */
 .spatial-box:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
 .lib-card:focus-visible { border-color: var(--accent); }
+.thumb-tile:focus-visible { border-color: var(--accent); }

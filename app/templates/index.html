@@ -18,6 +18,10 @@
     <script src="{{ url_for('static', filename='js/vendor/purify.min.js') }}"></script>
 </head>
 <body class="dark-mode">
+    <script>
+        try { if (localStorage.getItem('prefTheme') === 'light') document.body.classList.add('light-mode'); }
+        catch (err) { console.debug('Could not restore theme preference:', err); }
+    </script>
 
     <!-- ========================================== -->
     <!-- MAIN APPLICATION WORKSPACE                 -->
@@ -416,6 +420,7 @@
             <button class="ctrl-btn" onclick="changePage(-1)">Prev</button>
             <input type="number" id="page-num" aria-label="Page number" value="1" min="1" style="width: 45px; text-align: center;">
             <button class="ctrl-btn" onclick="changePage(1)">Next</button>
+            <button class="ctrl-btn" id="thumb-btn" aria-label="Page grid" title="Page grid (thumbnails)" onclick="openThumbGrid()">⊞</button>
         </div>
 
         <div class="divider"></div>
@@ -448,7 +453,7 @@
             <button class="ctrl-btn" aria-label="Zoom in" onclick="adjustImgZoom(15)">🔍+</button>
             <div class="divider"></div>
             <span style="font-size: 11px; color: #9aa0a6;">Font</span>
-            <input type="range" aria-label="Text size" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
+            <input type="range" id="font-slider" aria-label="Text size" min="12" max="40" value="17" oninput="updateFont(this.value)" style="width: 60px;">
         </div>
 
         <div class="divider"></div>
@@ -461,6 +466,14 @@
             <button id="theme-btn" class="ctrl-btn" aria-label="Toggle light or dark theme" onclick="toggleTheme()">☀️</button>
         </div>
 
+    </div>
+
+    <div id="thumb-overlay" class="modal-overlay" onclick="closeThumbGrid(event)">
+        <div class="modal-content thumb-modal" role="dialog" aria-modal="true" aria-labelledby="thumb-modal-title" onclick="event.stopPropagation()">
+            <button class="close-modal" type="button" aria-label="Close" onclick="closeThumbGrid()">×</button>
+            <h2 id="thumb-modal-title">Pages</h2>
+            <div id="thumb-grid"></div>
+        </div>
     </div>
 
     <!-- Application Script -->

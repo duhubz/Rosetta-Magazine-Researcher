@@ -32,6 +32,7 @@ let labelToPath = {};
 let pathToLabel = {};
 let itemsWithUpdates =[];
 let completedDownloads = new Set();
+let thumbObserver = null;
 
 img.onerror = () => {
     if (!img.getAttribute('src')) return;
@@ -131,6 +132,21 @@ async function init(forceUpdate = false) {
         }
         
         document.getElementById('mag-input').value = pathToLabel[magSelect.value] || "";
+        if (!oldVal) {
+            let savedLastRead = null;
+            try {
+                savedLastRead = JSON.parse(localStorage.getItem('lastRead'));
+            } catch (err) {
+                console.warn('Ignoring corrupted lastRead in localStorage:', err);
+                localStorage.removeItem('lastRead');
+            }
+            if (savedLastRead && localFiles.includes(savedLastRead.mag)) {
+                magSelect.value = savedLastRead.mag;
+                document.getElementById('mag-input').value = pathToLabel[savedLastRead.mag] || "";
+                pageInput.value = Number.isInteger(savedLastRead.page) && savedLastRead.page >= 1
+                    ? savedLastRead.page : 1;
+            }
+        }
         if (forceUpdate) update();
 
     } else {
@@ -183,10 +199,12 @@ async function update(targetPage = null, searchTerms = null) {
     adjustImgZoom(0);
 
     // Request Text & Metadata
+    let textFetchSucceeded = false;
     try {
         const res = await fetch(`/api/text?mag=${encodeURIComponent(mag)}&page=${page}&t=${Date.now()}`);
         if (!res.ok) throw new Error("Server error fetching text");
         currentRawData = await res.json();
+        textFetchSucceeded = true;
     } catch (err) {
         console.warn("Could not fetch page text, showing empty state:", err);
         currentRawData = {
@@ -196,6 +214,19 @@ async function update(targetPage = null, searchTerms = null) {
     }
 
     maxPage = currentRawData.total_pages || 1;
+    const currentPage = parseInt(pageInput.value, 10);
+    if (textFetchSucceeded && maxPage >= 1 && currentPage > maxPage && currentPage !== 1) {
+        pageInput.value = 1;
+        await update();
+        return;
+    }
+    if (textFetchSucceeded) {
+        const displayedPage = parseInt(pageInput.value, 10);
+        localStorage.setItem('lastRead', JSON.stringify({
+            mag: magSelect.value,
+            page: Number.isInteger(displayedPage) && displayedPage >= 1 ? displayedPage : 1,
+        }));
+    }
     drawCoordinateBoxes(currentRawData.coordinates ||[]);
     renderContent();
     renderMetadata(currentRawData.metadata || {}, page, mag);
@@ -233,6 +264,7 @@ function setImgZoom(val, anchor = null) {
     if (isNaN(num)) num = 100;
 
     currentImgZoom = Math.max(30, Math.min(num, 500));
+    localStorage.setItem('prefZoom', String(currentImgZoom));
 
     const leftPanel = document.getElementById('left');
     const safeHeight = leftPanel.clientHeight - 40;
@@ -2067,11 +2099,102 @@ function showTab(tab) {
 
 function toggleTheme() {
     document.body.classList.toggle('light-mode');
+    localStorage.setItem('prefTheme', document.body.classList.contains('light-mode') ? 'light' : 'dark');
     syncContentEditorTheme();
+}
+
+function openThumbGrid() {
+    const mag = magSelect.value;
+    if (!mag) return;
+    const total = maxPage || 1;
+    const textOnly = metadataCache[mag] && metadataCache[mag].text_only === 'true';
+    const grid = document.getElementById('thumb-grid');
+    grid.textContent = '';
+    if (thumbObserver) thumbObserver.disconnect();
+    thumbObserver = null;
+    let currentTile = null;
+
+    for (let n = 1; n <= total; n++) {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'thumb-tile';
+        tile.id = `thumb-tile-${n}`;
+        tile.dataset.page = n;
+        tile.setAttribute('aria-label', `Page ${n}`);
+        if (n === parseInt(pageInput.value, 10)) {
+            tile.classList.add('current');
+            tile.setAttribute('aria-current', 'page');
+            currentTile = tile;
+        }
+        if (!textOnly) {
+            const thumbnail = document.createElement('img');
+            thumbnail.alt = '';
+            thumbnail.draggable = false;
+            thumbnail.onerror = () => { thumbnail.style.display = 'none'; };
+            tile.appendChild(thumbnail);
+        }
+        const number = document.createElement('span');
+        number.className = 'thumb-num';
+        number.textContent = n;
+        tile.appendChild(number);
+        tile.addEventListener('click', () => {
+            pageInput.value = n;
+            update();
+            closeThumbGrid();
+        });
+        grid.appendChild(tile);
+    }
+
+    if (!textOnly) {
+        thumbObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                const tile = entry.target;
+                const n = Number(tile.dataset.page);
+                const thumbnail = tile.querySelector('img');
+                thumbnail.src = `/api/thumb?mag=${encodeURIComponent(mag)}&page=${n - 1}`;
+                thumbObserver.unobserve(tile);
+            });
+        }, { root: grid, rootMargin: '300px' });
+        grid.querySelectorAll('.thumb-tile').forEach((tile) => thumbObserver.observe(tile));
+    }
+    setRovingTabStops(grid, '.thumb-tile');
+    openDialog('thumb-overlay', { initialFocus: (currentTile || grid.querySelector('.thumb-tile')).id, onRequestClose: () => closeThumbGrid() });
+}
+
+function closeThumbGrid(e) {
+    if (e && e.target.id !== 'thumb-overlay' && !e.target.classList.contains('close-modal')) return;
+    if (thumbObserver) thumbObserver.disconnect();
+    thumbObserver = null;
+    closeDialog('thumb-overlay');
 }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 function toggleSec(id, show) { document.getElementById(id).style.display = show ? 'block' : 'none'; }
-function updateFont(v) { document.documentElement.style.setProperty('--font-size', v + 'px'); }
+function updateFont(v) {
+    document.documentElement.style.setProperty('--font-size', v + 'px');
+    localStorage.setItem('prefFontSize', String(v));
+}
+
+function restorePreferences() {
+    const fontRaw = localStorage.getItem('prefFontSize');
+    const fontSize = parseInt(fontRaw, 10);
+    if (Number.isNaN(fontSize)) {
+        if (fontRaw !== null) localStorage.removeItem('prefFontSize');
+    } else {
+        const clampedFontSize = Math.max(12, Math.min(fontSize, 40));
+        document.documentElement.style.setProperty('--font-size', `${clampedFontSize}px`);
+        document.getElementById('font-slider').value = clampedFontSize;
+    }
+
+    const zoomRaw = localStorage.getItem('prefZoom');
+    const zoom = parseInt(zoomRaw, 10);
+    if (Number.isNaN(zoom)) {
+        if (zoomRaw !== null) localStorage.removeItem('prefZoom');
+    } else {
+        currentImgZoom = Math.max(30, Math.min(zoom, 500));
+        document.getElementById('zoom-input').value = `${currentImgZoom}%`;
+    }
+}
 
 // Help Modal Content
 const HELP_MARKDOWN = `
@@ -2134,11 +2257,20 @@ The Search tab has a very smart date filter. You don't need exact days!
 ---
 
 ### ⌨️ Keyboard Shortcuts
-- **Left / Right Arrows:** Previous / Next Page.
-- **Page Up / Down:** Scroll the translation/transcription boxes.
-- **Ctrl + (Plus/Minus):** Zoom In / Out.
-- **Ctrl + 0:** Reset zoom to 100%.
-- **Escape:** Close any open editor or modal window.
+| Group | Shortcut | Action |
+| --- | --- | --- |
+| Reading | \`← / →\` | Previous / next page |
+| Reading | \`Page Up / Page Down\` | Scroll the text panel |
+| Reading | \`Ctrl/Cmd + + / -\` | Zoom the scan in / out |
+| Reading | \`Ctrl/Cmd + 0\` | Reset zoom to 100% |
+| Reading | \`Ctrl/Cmd + Mouse Wheel\` | Zoom toward the cursor |
+| Reading | \`Enter / Space\` (on a highlighted zone) | Jump to that zone's text |
+| Lists & grids | \`← → ↑ ↓\` | Move between items |
+| Lists & grids | \`Home / End\` | First / last item |
+| Lists & grids | \`Enter / Space\` | Open the selected item |
+| Dialogs | \`Escape\` | Close the top dialog |
+| Dialogs | \`Tab / Shift+Tab\` | Cycle focus inside the dialog |
+| General | \`?\` | Open this help window |
 
 ---
 
@@ -2222,13 +2354,18 @@ Copyright (c) 2026 Gaming Alexandria LLC.
 This program is free software: you can redistribute it and/or modify it under the terms of the **GNU Affero General Public License** as published by the Free Software Foundation.
 `;
 
-function toggleHelp(forceOpen = false) {
+function toggleHelp(forceOpen = false, scrollToShortcuts = false) {
     const overlay = document.getElementById('help-overlay');
     if (overlay.style.display === 'flex' && !forceOpen) {
         closeHelp();
     } else {
         document.getElementById('help-content').innerHTML = DOMPurify.sanitize(marked.parse(HELP_MARKDOWN));
         openDialog('help-overlay', { onRequestClose: () => closeHelp() });
+        if (scrollToShortcuts) {
+            const shortcutsHeading = Array.from(document.querySelectorAll('#help-content h3'))
+                .find((heading) => heading.textContent.includes('Keyboard Shortcuts'));
+            if (shortcutsHeading) shortcutsHeading.scrollIntoView();
+        }
     }
 }
 
@@ -2250,6 +2387,12 @@ document.addEventListener('keydown', (e) => {
     // While any dialog is open the dialog helper owns the keyboard;
     // suppress page-navigation shortcuts.
     if (dialogStack.length > 0) return;
+
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        toggleHelp(false, true);
+        return;
+    }
 
     if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') { e.preventDefault(); adjustImgZoom(15); return; }
@@ -2408,7 +2551,9 @@ function showAIDisclaimer() {
 initRovingContainer('lib-grid', '.lib-card', { grid: true });
 initRovingContainer('lib-mag-list', '.mag-list-item');
 initRovingContainer('search-results', '.result-item-main');
+initRovingContainer('thumb-grid', '.thumb-tile', { grid: true });
 initToolbarDragAndDrop();
+restorePreferences();
 init(true);
 showAIDisclaimer();
 setTimeout(checkForUpdateBanner, 3000);
