@@ -8,6 +8,7 @@ import pytest
 
 import app.config as cfg
 from app.services import update_check
+from app.version import __version__
 
 
 class _FakeResponse:
@@ -72,7 +73,7 @@ def test_check_for_updates_success(monkeypatch):
     result = update_check.check_for_updates()
     assert result == {
         "update_available": True,
-        "current_version": "2.0.0",
+        "current_version": __version__,
         "latest_version": "v9.9.9",
         "download_url": "https://github.com/example/release",
     }
@@ -98,7 +99,7 @@ def test_run_check_rate_limited_skips_fetch(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "data_dir", lambda: tmp_path)
     status = {
         "update_available": True,
-        "current_version": "2.0.0",
+        "current_version": __version__,
         "latest_version": "v9.9.9",
         "download_url": "https://github.com/example",
     }
@@ -143,7 +144,7 @@ def test_run_check_rate_limited_recomputes_after_upgrade(tmp_path, monkeypatch):
     update_check._run_check()
     refreshed = update_check.get_update_status()
     assert refreshed["update_available"] is False
-    assert refreshed["current_version"] == "2.0.0"
+    assert refreshed["current_version"] == __version__
     assert refreshed["latest_version"] == "v2.0"
 
 
