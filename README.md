@@ -12,7 +12,7 @@ If this tool saved you some time and you'd like to support the project, feel fre
 * **Venmo:** [@Dustin-Hubbard-26](https://venmo.com/Dustin-Hubbard-26)
 * **PayPal:** [Donate via PayPal](https://paypal.me/dustinhubbard1)
 
-[![Discord Link](https://www.gamingalexandria.com/ga-researcher/discord.png)](https://discord.gg/aFe4YaBT)
+[![Discord Link](https://www.gamingalexandria.com/ga-researcher/discord.png)](https://discord.gg/GZ66WVgyFx)
 
 ## 📥 Download & Installation
 
